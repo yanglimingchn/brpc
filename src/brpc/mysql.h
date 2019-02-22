@@ -30,7 +30,6 @@
 #include "butil/strings/string_piece.h"
 #include "butil/arena.h"
 
-
 namespace brpc {
 // Request to mysql.
 // Notice that you can pipeline multiple commands in one request and sent
@@ -64,7 +63,6 @@ public:
     void CopyFrom(const MysqlRequest& from);
     void MergeFrom(const MysqlRequest& from);
     void Clear();
-    bool IsInitialized() const;
 
     int ByteSize() const;
     bool MergePartialFromCodedStream(::google::protobuf::io::CodedInputStream* input);
@@ -79,6 +77,13 @@ public:
     static const MysqlRequest& default_instance();
     ::google::protobuf::Metadata GetMetadata() const;
 
+    bool Query(const std::string& stmt);
+
+    // True if previous AddCommand[V] failed.
+    bool has_error() const {
+        return _has_error;
+    }
+
     void Print(std::ostream&) const;
 
 private:
@@ -86,7 +91,6 @@ private:
     void SharedDtor();
     void SetCachedSize(int size) const;
 
-    int _ncommand;              // # of valid commands
     bool _has_error;            // previous AddCommand had error
     butil::IOBuf _buf;          // the serialized request.
     mutable int _cached_size_;  // ByteSize

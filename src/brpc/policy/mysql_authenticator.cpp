@@ -35,88 +35,71 @@ int MysqlAuthenticator::GenerateCredential(std::string* auth_str) const {
     auth_.cut1((char*)&greeting.protocol);
     auth_.cut_until(&greeting.version, MYSQL_STRING_NULL);
     {
-        uint8_t tmp[4];
-        auth_.cutn(tmp, 4);
-        greeting.thread_id = mysql_uint4korr(tmp);
+        uint8_t buf[4];
+        auth_.cutn(buf, 4);
+        greeting.thread_id = mysql_uint4korr(buf);
     }
     auth_.cut_until(&greeting.salt, MYSQL_STRING_NULL);
     {
-        uint8_t tmp[2];
-        auth_.cutn(tmp, 2);
-        greeting.capability = mysql_uint2korr(tmp);
+        uint8_t buf[2];
+        auth_.cutn(&buf, 2);
+        greeting.capability = mysql_uint2korr(buf);
     }
     auth_.cut1((char*)&greeting.language);
     {
-        uint8_t tmp[2];
-        auth_.cutn(tmp, 2);
-        greeting.status = mysql_uint2korr(tmp);
+        uint8_t buf[2];
+        auth_.cutn(buf, 2);
+        greeting.status = mysql_uint2korr(buf);
     }
     {
-        uint8_t tmp[2];
-        auth_.cutn(tmp, 2);
-        greeting.extended_capability = mysql_uint2korr(tmp);
+        uint8_t buf[2];
+        auth_.cutn(buf, 2);
+        greeting.extended_capability = mysql_uint2korr(buf);
     }
     auth_.cut1((char*)&greeting.auth_plugin_length);
     auth_.pop_front(10);
     auth_.cut_until(&greeting.salt2, MYSQL_STRING_NULL);
 
-    LOG(INFO) << "print auth: \n"
-              << greeting.protocol << "\n"
-              << greeting.version << "\n"
-              << greeting.thread_id << "\n"
-              << greeting.salt << "\n"
-              << greeting.capability << "\n"
-              << greeting.language << "\n"
-              << greeting.status << "\n"
-              << greeting.extended_capability << "\n"
-              << greeting.auth_plugin_length << "\n"
-              << greeting.salt2;
-    butil::IOBuf salt;
-    salt.append(greeting.salt);
-    salt.append(greeting.salt2);
-    std::string salt_response =
-        mysql_build_mysql41_authentication_response(salt.to_string(), "", passwd_, "");
-
-    // salt_response =
-    //     mysql_build_mysql41_authentication_response("yxpGP=}$5{2#Ywi,<)W]", "", passwd_, "");
     MysqlAuthResponse response;
-    response.capability = 0xa28d;
+    response.capability = (db_ == "" ? 0xa285 : 0xa28d);
     response.extended_capability = 0x000f;
     response.max_package_length = 16777216UL;
     response.language = 33;
     response.user = user_;
-    response.salt = salt_response;
-    response.schema = "";
+    {
+        butil::IOBuf salt;
+        salt.append(greeting.salt);
+        salt.append(greeting.salt2);
+        std::string data =
+            mysql_build_mysql41_authentication_response(salt.to_string(), "", passwd_, "");
+        response.salt = data;
+    }
+    response.schema = db_;
 
-    butil::IOBuf resp;
+    butil::IOBuf payload;
     uint16_t capability = butil::ByteSwapToLE16(response.capability);
-    resp.append(&capability, 2);
+    payload.append(&capability, 2);
     uint16_t extended_capability = butil::ByteSwapToLE16(response.extended_capability);
-    resp.append(&response.extended_capability, 2);
+    payload.append(&response.extended_capability, 2);
     uint32_t max_package_length = butil::ByteSwapToLE32(response.max_package_length);
-    resp.append(&max_package_length, 4);
-    resp.append(&response.language, 1);
+    payload.append(&max_package_length, 4);
+    payload.append(&response.language, 1);
     for (int i = 0; i < 23; ++i)
-        resp.push_back(MYSQL_STRING_NULL[0]);
-    resp.append(response.user);
-    resp.push_back('\0');
-    LOG(INFO) << "user size:" << response.user.size();
-    // char c;
-    // response.salt.cut1(&c);
-    // int salt_size = response.salt.size();
-    resp.push_back((uint8_t)(response.salt.size()));
-    LOG(INFO) << response.salt;
-    resp.append(response.salt);
-    LOG(INFO) << "salt size:" << response.salt.size();
-    // resp.append("mysql_native_password");
-    resp.append("test");
-    uint32_t package_length = butil::ByteSwapToLE32(resp.size());
-    LOG(INFO) << "package_length:" << resp.size();
-    butil::IOBuf resp_final;
-    resp_final.append(&package_length, 3);
-    resp_final.push_back(0x01);
-    resp_final.append(resp);
-    *auth_str = resp_final.to_string();
+        payload.push_back(MYSQL_STRING_NULL[0]);
+    payload.append(response.user);
+    payload.push_back('\0');
+    payload.push_back((uint8_t)(response.salt.size()));
+    payload.append(response.salt);
+    if (db_ != "") {
+        payload.append(db_);
+        payload.push_back('\0');
+    }
+    uint32_t payload_size = butil::ByteSwapToLE32(payload.size());
+    butil::IOBuf package;
+    package.append(&payload_size, 3);
+    package.push_back(0x01);
+    package.append(payload);
+    *auth_str = package.to_string();
     return 0;
 }
 
@@ -126,9 +109,10 @@ MysqlAuthenticator* global_mysql_authenticator() {
 }
 
 const Authenticator* global_mysql_authenticator(const std::string& user,
-                                                const std::string& passwd) {
+                                                const std::string& passwd,
+                                                const std::string& db) {
     // return butil::get_leaky_singleton<MysqlAuthenticator>();
-    g_mysql_authenticator = new MysqlAuthenticator(user, passwd);
+    g_mysql_authenticator = new MysqlAuthenticator(user, passwd, db);
     return g_mysql_authenticator;
 }
 

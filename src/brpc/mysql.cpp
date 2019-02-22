@@ -27,7 +27,8 @@
 #include "butil/macros.h"
 #include "brpc/controller.h"
 #include "brpc/mysql.h"
-
+#include "brpc/mysql_command.h"
+#include "brpc/mysql_util.h"
 
 namespace brpc {
 
@@ -133,7 +134,6 @@ MysqlRequest::MysqlRequest(const MysqlRequest& from) : ::google::protobuf::Messa
 }
 
 void MysqlRequest::SharedCtor() {
-    _ncommand = 0;
     _has_error = false;
     _cached_size_ = 0;
 }
@@ -171,7 +171,6 @@ MysqlRequest* MysqlRequest::New() const {
 }
 
 void MysqlRequest::Clear() {
-    _ncommand = 0;
     _has_error = false;
     _buf.clear();
 }
@@ -213,7 +212,6 @@ void MysqlRequest::MergeFrom(const MysqlRequest& from) {
     GOOGLE_CHECK_NE(&from, this);
     _has_error = _has_error || from._has_error;
     _buf.append(from._buf);
-    _ncommand += from._ncommand;
 }
 
 void MysqlRequest::CopyFrom(const ::google::protobuf::Message& from) {
@@ -230,14 +228,9 @@ void MysqlRequest::CopyFrom(const MysqlRequest& from) {
     MergeFrom(from);
 }
 
-bool MysqlRequest::IsInitialized() const {
-    return _ncommand != 0;
-}
-
 void MysqlRequest::Swap(MysqlRequest* other) {
     if (other != this) {
         _buf.swap(other->_buf);
-        std::swap(_ncommand, other->_ncommand);
         std::swap(_has_error, other->_has_error);
         std::swap(_cached_size_, other->_cached_size_);
     }
@@ -260,24 +253,39 @@ bool MysqlRequest::SerializeTo(butil::IOBuf* buf) const {
     return metadata;
 }
 
+bool MysqlRequest::Query(const std::string& stmt) {
+    if (_has_error) {
+        return false;
+    }
+
+    const butil::Status st = MysqlMakeCommand(&_buf, COM_QUERY, stmt);
+    if (st.ok()) {
+        return true;
+    } else {
+        CHECK(st.ok()) << st;
+        _has_error = true;
+        return false;
+    }
+}
+
 void MysqlRequest::Print(std::ostream& os) const {
-    // butil::IOBuf cp = _buf;
-    // butil::IOBuf seg;
-    // while (cp.cut_until(&seg, "\r\n") == 0) {
-    //     os << seg;
-    //     if (FLAGS_mysql_verbose_crlf2space) {
-    //         os << ' ';
-    //     } else {
-    //         os << "\\r\\n";
-    //     }
-    //     seg.clear();
-    // }
-    // if (!cp.empty()) {
-    //     os << cp;
-    // }
-    // if (_has_error) {
-    //     os << "[ERROR]";
-    // }
+    butil::IOBuf cp = _buf;
+    {
+        uint8_t buf[3];
+        cp.cutn(buf, 3);
+        os << "size:" << mysql_uint3korr(buf) << ",";
+    }
+    {
+        uint8_t buf;
+        cp.cut1((char*)&buf);
+        os << "sequence:" << (unsigned)buf << ",";
+    }
+    os << "payload(hex):";
+    while (!cp.empty()) {
+        uint8_t buf;
+        cp.cut1((char*)&buf);
+        os << std::hex << (unsigned)buf;
+    }
 }
 
 std::ostream& operator<<(std::ostream& os, const MysqlRequest& r) {

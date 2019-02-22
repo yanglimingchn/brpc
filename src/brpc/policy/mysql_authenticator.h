@@ -23,11 +23,15 @@
 namespace brpc {
 namespace policy {
 
+enum MysqlAuthStep {
+    MYSQL_AUTH_STEP_ONE,
+    MYSQL_AUTH_STEP_TWO,
+};
 // Request to mysql for authentication.
 class MysqlAuthenticator : public Authenticator {
 public:
-    MysqlAuthenticator(const std::string& user, const std::string& passwd)
-        : user_(user), passwd_(passwd), step_(0) {}
+    MysqlAuthenticator(const std::string& user, const std::string& passwd, const std::string& db)
+        : user_(user), passwd_(passwd), db_(db), step_(MYSQL_AUTH_STEP_ONE) {}
 
     int GenerateCredential(std::string* auth_str) const;
 
@@ -35,15 +39,15 @@ public:
         return 0;
     }
 
-    int CurrStep() const {
+    MysqlAuthStep CurrStep() const {
         return step_;
     }
 
     void NextStep() {
-        ++step_;
+        step_ = MYSQL_AUTH_STEP_TWO;
     }
 
-    butil::IOBuf& raw_req() {
+    butil::IOBuf& raw_req() const {
         return req_;
     }
 
@@ -54,13 +58,15 @@ public:
 private:
     const std::string user_;
     const std::string passwd_;
-    int step_;
-    butil::IOBuf req_;
+    const std::string db_;
+    MysqlAuthStep step_;
+    mutable butil::IOBuf req_;
     mutable butil::IOBuf auth_;
 };
 
-MysqlAuthenticator* global_mysql_authenticator();
-const Authenticator* global_mysql_authenticator(const std::string& user, const std::string& passwd);
+const Authenticator* global_mysql_authenticator(const std::string& user,
+                                                const std::string& passwd,
+                                                const std::string& db = "");
 
 }  // namespace policy
 }  // namespace brpc

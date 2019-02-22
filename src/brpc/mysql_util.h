@@ -18,6 +18,7 @@
 #define BRPC_MYSQL_UTIL_H
 
 #include "butil/iobuf.h"  // butil::IOBuf
+#include "butil/sys_byteorder.h"
 
 namespace brpc {
 extern const std::string MYSQL_STRING_NULL;
@@ -45,15 +46,17 @@ struct MysqlAuthResponse {
     butil::IOBuf schema;
 };
 
-static inline uint16_t mysql_uint2korr(const uint8_t* A) {
+// little endian order to host order
+
+inline uint16_t mysql_uint2korr(const uint8_t* A) {
     return (uint16_t)(((uint16_t)(A[0])) + ((uint16_t)(A[1]) << 8));
 }
 
-static inline uint32_t mysql_uint3korr(const uint8_t* A) {
+inline uint32_t mysql_uint3korr(const uint8_t* A) {
     return (uint32_t)(((uint32_t)(A[0])) + (((uint32_t)(A[1])) << 8) + (((uint32_t)(A[2])) << 16));
 }
 
-static inline uint32_t mysql_uint4korr(const uint8_t* A) {
+inline uint32_t mysql_uint4korr(const uint8_t* A) {
     return (uint32_t)(((uint32_t)(A[0])) + (((uint32_t)(A[1])) << 8) + (((uint32_t)(A[2])) << 16) +
                       (((uint32_t)(A[3])) << 24));
 }
