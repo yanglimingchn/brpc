@@ -407,40 +407,40 @@ void MysqlResponse::Swap(MysqlResponse* other) {
 
 // ===================================================================
 
-// bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf, int reply_count) {
-//     size_t oldsize = buf.size();
-//     if (reply_size() == 0) {
-//         if (!_first_reply.ConsumePartialIOBuf(buf, &_arena)) {
-//             return false;
-//         }
-//         const size_t newsize = buf.size();
-//         _cached_size_ += oldsize - newsize;
-//         oldsize = newsize;
-//         ++_nreply;
-//     }
-//     if (reply_count > 1) {
-//         if (_other_replies == NULL) {
-//             _other_replies = (MysqlReply*)_arena.allocate(sizeof(MysqlReply) * (reply_count -
-//             1)); if (_other_replies == NULL) {
-//                 LOG(ERROR) << "Fail to allocate MysqlReply[" << reply_count - 1 << "]";
-//                 return false;
-//             }
-//             for (int i = 0; i < reply_count - 1; ++i) {
-//                 new (&_other_replies[i]) MysqlReply;
-//             }
-//         }
-//         for (int i = reply_size(); i < reply_count; ++i) {
-//             if (!_other_replies[i - 1].ConsumePartialIOBuf(buf, &_arena)) {
-//                 return false;
-//             }
-//             const size_t newsize = buf.size();
-//             _cached_size_ += oldsize - newsize;
-//             oldsize = newsize;
-//             ++_nreply;
-//         }
-//     }
-//     return true;
-// }
+bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf) {
+    // size_t oldsize = buf.size();
+    // if (reply_size() == 0) {
+    //     if (!_first_reply.ConsumePartialIOBuf(buf, &_arena)) {
+    //         return false;
+    //     }
+    //     const size_t newsize = buf.size();
+    //     _cached_size_ += oldsize - newsize;
+    //     oldsize = newsize;
+    //     ++_nreply;
+    // }
+    // if (reply_count > 1) {
+    //     if (_other_replies == NULL) {
+    //         _other_replies = (MysqlReply*)_arena.allocate(sizeof(MysqlReply) * (reply_count -
+    //         1)); if (_other_replies == NULL) {
+    //             LOG(ERROR) << "Fail to allocate MysqlReply[" << reply_count - 1 << "]";
+    //             return false;
+    //         }
+    //         for (int i = 0; i < reply_count - 1; ++i) {
+    //             new (&_other_replies[i]) MysqlReply;
+    //         }
+    //     }
+    //     for (int i = reply_size(); i < reply_count; ++i) {
+    //         if (!_other_replies[i - 1].ConsumePartialIOBuf(buf, &_arena)) {
+    //             return false;
+    //         }
+    //         const size_t newsize = buf.size();
+    //         _cached_size_ += oldsize - newsize;
+    //         oldsize = newsize;
+    //         ++_nreply;
+    //     }
+    // }
+    return true;
+}
 
 std::ostream& operator<<(std::ostream& os, const MysqlResponse& response) {
     // if (response.reply_size() == 0) {

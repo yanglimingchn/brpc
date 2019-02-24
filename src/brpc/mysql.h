@@ -29,6 +29,7 @@
 #include "butil/iobuf.h"
 #include "butil/strings/string_piece.h"
 #include "butil/arena.h"
+#include "brpc/mysql_util.h"
 
 namespace brpc {
 // Request to mysql.
@@ -117,6 +118,10 @@ public:
         return *this;
     }
     void Swap(MysqlResponse* other);
+    // Parse and consume intact replies from the buf.
+    // Returns true on success, false otherwise.
+    bool ConsumePartialIOBuf(butil::IOBuf& buf);
+
     // implements Message ----------------------------------------------
 
     MysqlResponse* New() const;
@@ -144,6 +149,12 @@ private:
     void SharedCtor();
     void SharedDtor();
     void SetCachedSize(int size) const;
+
+    MysqlReply _first_reply;
+    MysqlReply* _other_replies;
+    butil::Arena _arena;
+    int _nreply;
+    mutable int _cached_size_;
 
     friend void protobuf_AddDesc_baidu_2frpc_2fmysql_5fbase_2eproto_impl();
     friend void protobuf_AddDesc_baidu_2frpc_2fmysql_5fbase_2eproto();

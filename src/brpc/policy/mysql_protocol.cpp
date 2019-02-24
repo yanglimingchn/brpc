@@ -43,6 +43,17 @@ DEFINE_bool(mysql_verbose, false, "[DEBUG] Print EVERY mysql request/response");
 
 
 MysqlAuthenticator* global_mysql_authenticator();
+
+struct InputResponse : public InputMessageBase {
+    bthread_id_t id_wait;
+    MysqlResponse response;
+
+    // @InputMessageBase
+    void DestroyImpl() {
+        delete this;
+    }
+};
+
 // "Message" = "Response" as we only implement the client for mysql.
 ParseResult ParseMysqlMessage(butil::IOBuf* source,
                               Socket* socket,
@@ -59,14 +70,11 @@ ParseResult ParseMysqlMessage(butil::IOBuf* source,
     }
 
     do {
-        MostCommonMessage* msg = static_cast<MostCommonMessage*>(socket->parsing_context());
+        InputResponse* msg = static_cast<InputResponse*>(socket->parsing_context());
         if (msg == NULL) {
-            msg = MostCommonMessage::Get();
+          msg = new InputResponse;
             socket->reset_parsing_context(msg);
         }
-        DestroyingPtr<MostCommonMessage> release_ctx =
-            static_cast<MostCommonMessage*>(socket->release_parsing_context());
-
         char header[4];
         const uint8_t* p = (const uint8_t*)source->fetch(header, sizeof(header));
         if (NULL == p) {
@@ -79,37 +87,42 @@ ParseResult ParseMysqlMessage(butil::IOBuf* source,
             return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
         }
 
-        source->cutn(&msg->meta, 4);
-        source->cutn(&msg->payload, payload_size);
+        msg->response.ConsumePartialIOBuf(*source);
 
-        if (pi.with_auth) {
-            MysqlAuthenticator* auth = global_mysql_authenticator();
-            if (auth->CurrStep() == MYSQL_AUTH_STEP_ONE) {  // receive greeting & send auth
-                auth->raw_auth() = msg->payload;
-                std::string auth_data;
-                if (auth->GenerateCredential(&auth_data) != 0) {
-                    LOG(INFO) << "[MYSQL PARSE] authentication step one";
-                    return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
-                }
-                butil::IOBuf auth_resp;
-                auth_resp.append(auth_data);
-                auth_resp.cut_into_file_descriptor(socket->fd());
-                auth->NextStep();
-            } else if (auth->CurrStep() == MYSQL_AUTH_STEP_TWO) {  // check auth & send request
-                butil::IOBuf& raw_req = auth->raw_req();
-                raw_req.cut_into_file_descriptor(socket->fd());
-                pi.with_auth = false;
-            } else {
-                LOG(ERROR) << "[MYSQL PARSE] wrong authentication step";
-                return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
-            }
-            socket->GivebackPipelinedInfo(pi);
-            return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
-        }
+        // source->cutn(&msg->meta, 4);
+        // source->cutn(&msg->payload, payload_size);
 
-        msg->pi = pi;
+        // if (pi.with_auth) {
+        //     MysqlAuthenticator* auth = global_mysql_authenticator();
+        //     if (auth->CurrStep() == MYSQL_AUTH_STEP_ONE) {  // receive greeting & send auth
+        //         auth->raw_auth() = msg->payload;
+        //         std::string auth_data;
+        //         if (auth->GenerateCredential(&auth_data) != 0) {
+        //             LOG(INFO) << "[MYSQL PARSE] authentication step one";
+        //             return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+        //         }
+        //         butil::IOBuf auth_resp;
+        //         auth_resp.append(auth_data);
+        //         auth_resp.cut_into_file_descriptor(socket->fd());
+        //         auth->NextStep();
+        //     } else if (auth->CurrStep() == MYSQL_AUTH_STEP_TWO) {  // check auth & send request
+        //         butil::IOBuf& raw_req = auth->raw_req();
+        //         raw_req.cut_into_file_descriptor(socket->fd());
+        //         pi.with_auth = false;
+        //     } else {
+        //         LOG(ERROR) << "[MYSQL PARSE] wrong authentication step";
+        //         return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+        //     }
+        //     DestroyingPtr<MostCommonMessage> auth_msg =
+        //         static_cast<MostCommonMessage*>(socket->release_parsing_context());
+        //     socket->GivebackPipelinedInfo(pi);
+        //     return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
+        // }
+
+        msg->id_wait = pi.id_wait;
         size_t oldsize = source->size();
         std::string context = source->to_string();
+        socket->release_parsing_context();
         return MakeMessage(msg);
     } while (true);
 

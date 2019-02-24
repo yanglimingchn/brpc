@@ -18,9 +18,19 @@
 #define BRPC_MYSQL_UTIL_H
 
 #include "butil/iobuf.h"  // butil::IOBuf
+#include "butil/arena.h"
 #include "butil/sys_byteorder.h"
 
 namespace brpc {
+
+  enum MysqlRepsonseType {
+    RSP_OK = 0x00,
+    RSP_ERROR = 0xFF,
+    RSP_BEGIN = 0x01,
+    RSP_END = 0xFB,
+    RSP_EOF = 0xFE,
+};
+
 extern const std::string MYSQL_STRING_NULL;
 struct MysqlGreeting {
     uint8_t protocol;
@@ -46,6 +56,10 @@ struct MysqlAuthResponse {
     butil::IOBuf schema;
 };
 
+class MysqlReply {
+public:
+  bool ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena);
+};
 // little endian order to host order
 
 inline uint16_t mysql_uint2korr(const uint8_t* A) {

@@ -56,14 +56,6 @@ enum MysqlCommandType {
     COM_RESET_CONNECTION,
 };
 
-enum MysqlRepsonseType {
-    RSP_OK = 0x00,
-    RSP_ERROR = 0xFF,
-    RSP_EOF = 0xFE,
-    RSP_BEGIN = 0x01,
-    RSP_END = 0xFB,
-};
-
 butil::Status MysqlMakeCommand(butil::IOBuf* outbuf,
                                const MysqlCommandType type,
                                const std::string& stmt,
