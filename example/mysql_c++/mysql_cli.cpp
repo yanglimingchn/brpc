@@ -143,8 +143,7 @@ int main(int argc, char* argv[]) {
         //     // too much sense to run it in this CLI, just quit.
         //     return 0;
         // }
-        char* command =
-            "ALTER TABLE runoob_tbl  ALTER COLUMN runoob_title SET DEFAULT 'test_title'";
+        char* command = "select * from Persons";
         access_mysql(channel, command);
         // }
     } else {

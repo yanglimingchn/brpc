@@ -356,7 +356,7 @@ void MysqlResponse::SerializeWithCachedSizes(::google::protobuf::io::CodedOutput
 }
 
 int MysqlResponse::ByteSize() const {
-    return 0;
+    return _cached_size_;
 }
 
 void MysqlResponse::MergeFrom(const ::google::protobuf::Message& from) {
@@ -419,8 +419,6 @@ bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_greetin
         return false;
     }
     uint32_t payload_size = mysql_uint3korr(p);
-    LOG(INFO) << "payload_size:" << payload_size;
-    LOG(INFO) << "source size = " << buf.size();
     if (buf.size() < 4 + payload_size || payload_size <= 0) {
         return false;
     }
@@ -432,11 +430,9 @@ bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_greetin
 
     size_t oldsize = buf.size();
     {
-        LOG(INFO) << "consume";
         if (!_reply.ConsumePartialIOBuf(buf, &_arena)) {
             return false;
         }
-        LOG(INFO) << _reply;
         const size_t newsize = buf.size();
         _cached_size_ += oldsize - newsize;
         oldsize = newsize;
@@ -467,6 +463,7 @@ bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_greetin
 }
 
 std::ostream& operator<<(std::ostream& os, const MysqlResponse& response) {
+    return os << response.reply(0);
     // if (response.reply_size() == 0) {
     //     return os << "<empty response>";
     // } else if (response.reply_size() == 1) {

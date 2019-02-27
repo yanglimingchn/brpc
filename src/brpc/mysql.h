@@ -122,6 +122,9 @@ public:
     // Returns true on success, false otherwise.
     bool ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_greeting = false);
 
+    const MysqlReply& reply(int index) const {
+        return _reply;
+    }
     // implements Message ----------------------------------------------
 
     MysqlResponse* New() const;

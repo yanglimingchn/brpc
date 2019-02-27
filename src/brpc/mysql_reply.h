@@ -181,6 +181,7 @@ public:
         FieldFlag flag;
         uint8_t decimal;
     };
+    union RowField {};
     struct RowData {
         butil::StringPiece* fields;
     };
@@ -216,8 +217,6 @@ private:
 inline void MysqlReply::Swap(MysqlReply& other) {
     std::swap(_type, other._type);
     std::swap(_data.padding, other._data.padding);
-    // std::swap(_data.padding[0], other._data.padding[0]);
-    // std::swap(_data.padding[1], other._data.padding[1]);
 }
 
 inline std::ostream& operator<<(std::ostream& os, const MysqlReply& r) {

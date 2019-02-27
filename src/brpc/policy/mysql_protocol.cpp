@@ -82,7 +82,6 @@ ParseResult ParseMysqlMessage(butil::IOBuf* source,
         }
 
         if (pi.with_auth) {
-            LOG(INFO) << "sss";
             char header[4];
             source->cutn(header, 4);
             uint32_t payload_size = mysql_uint3korr((uint8_t*)header);
@@ -108,8 +107,8 @@ ParseResult ParseMysqlMessage(butil::IOBuf* source,
                 LOG(ERROR) << "[MYSQL PARSE] wrong authentication step";
                 return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
             }
-            DestroyingPtr<MostCommonMessage> auth_msg =
-                static_cast<MostCommonMessage*>(socket->release_parsing_context());
+            DestroyingPtr<InputResponse> auth_msg =
+                static_cast<InputResponse*>(socket->release_parsing_context());
             socket->GivebackPipelinedInfo(pi);
             return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
         }
@@ -138,10 +137,10 @@ void ProcessMysqlResponse(InputMessageBase* msg_base) {
     ControllerPrivateAccessor accessor(cntl);
     Span* span = accessor.span();
     if (span) {
-        // span->set_base_real_us(msg->base_real_us());
-        // span->set_received_us(msg->received_us());
-        // span->set_response_size(msg->response.ByteSize());
-        // span->set_start_parse_us(start_parse_us);
+        span->set_base_real_us(msg->base_real_us());
+        span->set_received_us(msg->received_us());
+        span->set_response_size(msg->response.ByteSize());
+        span->set_start_parse_us(start_parse_us);
     }
     const int saved_error = cntl->ErrorCode();
     if (cntl->response() != NULL) {
