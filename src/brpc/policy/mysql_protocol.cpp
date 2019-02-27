@@ -28,7 +28,7 @@
 #include "brpc/details/server_private_accessor.h"
 #include "brpc/span.h"
 #include "brpc/mysql.h"
-#include "brpc/mysql_util.h"
+#include "brpc/mysql_reply.h"
 #include "brpc/policy/mysql_protocol.h"
 #include "brpc/policy/most_common_message.h"
 #include "brpc/policy/mysql_authenticator.h"
@@ -72,56 +72,49 @@ ParseResult ParseMysqlMessage(butil::IOBuf* source,
     do {
         InputResponse* msg = static_cast<InputResponse*>(socket->parsing_context());
         if (msg == NULL) {
-          msg = new InputResponse;
+            msg = new InputResponse;
             socket->reset_parsing_context(msg);
         }
-        char header[4];
-        const uint8_t* p = (const uint8_t*)source->fetch(header, sizeof(header));
-        if (NULL == p) {
-            return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
-        }
-        uint32_t payload_size = mysql_uint3korr(p);
-        LOG(INFO) << "payload_size:" << payload_size;
-        LOG(INFO) << "source size = " << source->size();
-        if (source->size() < 4 + payload_size /*header + payload*/) {
+
+        if (msg->response.ConsumePartialIOBuf(*source, pi.with_auth) == false) {
+            socket->GivebackPipelinedInfo(pi);
             return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
         }
 
-        msg->response.ConsumePartialIOBuf(*source);
-
-        // source->cutn(&msg->meta, 4);
-        // source->cutn(&msg->payload, payload_size);
-
-        // if (pi.with_auth) {
-        //     MysqlAuthenticator* auth = global_mysql_authenticator();
-        //     if (auth->CurrStep() == MYSQL_AUTH_STEP_ONE) {  // receive greeting & send auth
-        //         auth->raw_auth() = msg->payload;
-        //         std::string auth_data;
-        //         if (auth->GenerateCredential(&auth_data) != 0) {
-        //             LOG(INFO) << "[MYSQL PARSE] authentication step one";
-        //             return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
-        //         }
-        //         butil::IOBuf auth_resp;
-        //         auth_resp.append(auth_data);
-        //         auth_resp.cut_into_file_descriptor(socket->fd());
-        //         auth->NextStep();
-        //     } else if (auth->CurrStep() == MYSQL_AUTH_STEP_TWO) {  // check auth & send request
-        //         butil::IOBuf& raw_req = auth->raw_req();
-        //         raw_req.cut_into_file_descriptor(socket->fd());
-        //         pi.with_auth = false;
-        //     } else {
-        //         LOG(ERROR) << "[MYSQL PARSE] wrong authentication step";
-        //         return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
-        //     }
-        //     DestroyingPtr<MostCommonMessage> auth_msg =
-        //         static_cast<MostCommonMessage*>(socket->release_parsing_context());
-        //     socket->GivebackPipelinedInfo(pi);
-        //     return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
-        // }
+        if (pi.with_auth) {
+            LOG(INFO) << "sss";
+            char header[4];
+            source->cutn(header, 4);
+            uint32_t payload_size = mysql_uint3korr((uint8_t*)header);
+            butil::IOBuf payload;
+            source->cutn(&payload, payload_size);
+            MysqlAuthenticator* auth = global_mysql_authenticator();
+            if (auth->CurrStep() == MYSQL_AUTH_STEP_ONE) {  // receive greeting & send auth
+                auth->raw_auth() = payload;
+                std::string auth_data;
+                if (auth->GenerateCredential(&auth_data) != 0) {
+                    LOG(INFO) << "[MYSQL PARSE] authentication step one";
+                    return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+                }
+                butil::IOBuf auth_resp;
+                auth_resp.append(auth_data);
+                auth_resp.cut_into_file_descriptor(socket->fd());
+                auth->NextStep();
+            } else if (auth->CurrStep() == MYSQL_AUTH_STEP_TWO) {  // check auth & send request
+                butil::IOBuf& raw_req = auth->raw_req();
+                raw_req.cut_into_file_descriptor(socket->fd());
+                pi.with_auth = false;
+            } else {
+                LOG(ERROR) << "[MYSQL PARSE] wrong authentication step";
+                return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+            }
+            DestroyingPtr<MostCommonMessage> auth_msg =
+                static_cast<MostCommonMessage*>(socket->release_parsing_context());
+            socket->GivebackPipelinedInfo(pi);
+            return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
+        }
 
         msg->id_wait = pi.id_wait;
-        size_t oldsize = source->size();
-        std::string context = source->to_string();
         socket->release_parsing_context();
         return MakeMessage(msg);
     } while (true);
@@ -131,9 +124,9 @@ ParseResult ParseMysqlMessage(butil::IOBuf* source,
 
 void ProcessMysqlResponse(InputMessageBase* msg_base) {
     const int64_t start_parse_us = butil::cpuwide_time_us();
-    DestroyingPtr<MostCommonMessage> msg(static_cast<MostCommonMessage*>(msg_base));
+    DestroyingPtr<InputResponse> msg(static_cast<InputResponse*>(msg_base));
 
-    const bthread_id_t cid = msg->pi.id_wait;
+    const bthread_id_t cid = msg->id_wait;
     Controller* cntl = NULL;
     const int rc = bthread_id_lock(cid, (void**)&cntl);
     if (rc != 0) {
@@ -151,24 +144,17 @@ void ProcessMysqlResponse(InputMessageBase* msg_base) {
         // span->set_start_parse_us(start_parse_us);
     }
     const int saved_error = cntl->ErrorCode();
-    // if (cntl->response() != NULL) {
-    //     if (cntl->response()->GetDescriptor() != MysqlResponse::descriptor()) {
-    //         cntl->SetFailed(ERESPONSE, "Must be MysqlResponse");
-    //     } else {
-    //         // We work around ParseFrom of pb which is just a placeholder.
-    //         if (msg->response.reply_size() != (int)accessor.pipelined_count()) {
-    //             cntl->SetFailed(ERESPONSE,
-    //                             "pipelined_count=%d of response does "
-    //                             "not equal request's=%d",
-    //                             msg->response.reply_size(),
-    //                             accessor.pipelined_count());
-    //         }
-    //         ((MysqlResponse*)cntl->response())->Swap(&msg->response);
-    //         if (FLAGS_mysql_verbose) {
-    //             LOG(INFO) << "\n[MYSQL RESPONSE] " << *((MysqlResponse*)cntl->response());
-    //         }
-    //     }
-    // }  // silently ignore the response.
+    if (cntl->response() != NULL) {
+        if (cntl->response()->GetDescriptor() != MysqlResponse::descriptor()) {
+            cntl->SetFailed(ERESPONSE, "Must be MysqlResponse");
+        } else {
+            // We work around ParseFrom of pb which is just a placeholder.
+            ((MysqlResponse*)cntl->response())->Swap(&msg->response);
+            if (FLAGS_mysql_verbose) {
+                LOG(INFO) << "\n[MYSQL RESPONSE] " << *((MysqlResponse*)cntl->response());
+            }
+        }
+    }  // silently ignore the response.
 
     if (FLAGS_mysql_verbose) {
         LOG(INFO) << "\n[MYSQL RESPONSE] ";

@@ -28,7 +28,7 @@
 #include "brpc/controller.h"
 #include "brpc/mysql.h"
 #include "brpc/mysql_command.h"
-#include "brpc/mysql_util.h"
+#include "brpc/mysql_reply.h"
 
 namespace brpc {
 
@@ -394,6 +394,11 @@ bool MysqlResponse::IsInitialized() const {
 
 void MysqlResponse::Swap(MysqlResponse* other) {
     if (other != this) {
+        _reply.Swap(other->_reply);
+        // std::swap(_other_replies, other->_other_replies);
+        _arena.swap(other->_arena);
+        // std::swap(_nreply, other->_nreply);
+        std::swap(_cached_size_, other->_cached_size_);
     }
 }
 
@@ -407,17 +412,36 @@ void MysqlResponse::Swap(MysqlResponse* other) {
 
 // ===================================================================
 
-bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf) {
-    // size_t oldsize = buf.size();
-    // if (reply_size() == 0) {
-    //     if (!_first_reply.ConsumePartialIOBuf(buf, &_arena)) {
-    //         return false;
-    //     }
-    //     const size_t newsize = buf.size();
-    //     _cached_size_ += oldsize - newsize;
-    //     oldsize = newsize;
-    //     ++_nreply;
-    // }
+bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_greeting) {
+    char header[4];
+    const uint8_t* p = (const uint8_t*)buf.fetch(header, sizeof(header));
+    if (NULL == p) {
+        return false;
+    }
+    uint32_t payload_size = mysql_uint3korr(p);
+    LOG(INFO) << "payload_size:" << payload_size;
+    LOG(INFO) << "source size = " << buf.size();
+    if (buf.size() < 4 + payload_size || payload_size <= 0) {
+        return false;
+    }
+
+    // if (reply_size() == 0)
+    if (is_greeting) {
+        return true;
+    }
+
+    size_t oldsize = buf.size();
+    {
+        LOG(INFO) << "consume";
+        if (!_reply.ConsumePartialIOBuf(buf, &_arena)) {
+            return false;
+        }
+        LOG(INFO) << _reply;
+        const size_t newsize = buf.size();
+        _cached_size_ += oldsize - newsize;
+        oldsize = newsize;
+        // ++_nreply;
+    }
     // if (reply_count > 1) {
     //     if (_other_replies == NULL) {
     //         _other_replies = (MysqlReply*)_arena.allocate(sizeof(MysqlReply) * (reply_count -

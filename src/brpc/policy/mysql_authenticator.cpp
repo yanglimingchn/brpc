@@ -16,7 +16,7 @@
 
 #include "brpc/policy/mysql_authenticator.h"
 #include "brpc/policy/mysql_auth_hash.h"
-#include "brpc/mysql_util.h"
+#include "brpc/mysql_reply.h"
 #include "butil/base64.h"
 #include "butil/iobuf.h"
 #include "butil/logging.h"  // LOG()
