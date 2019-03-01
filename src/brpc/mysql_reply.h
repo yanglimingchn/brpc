@@ -123,6 +123,7 @@ public:
         FIELD_TYPE_NEWDATE = 0x0E,
         FIELD_TYPE_VARCHAR = 0x0F,
         FIELD_TYPE_BIT = 0x10,
+        FIELD_TYPE_JSON = 0xF5,
         FIELD_TYPE_NEWDECIMAL = 0xF6,
         FIELD_TYPE_ENUM = 0xF7,
         FIELD_TYPE_SET = 0xF8,
@@ -134,7 +135,6 @@ public:
         FIELD_TYPE_STRING = 0xFE,
         FIELD_TYPE_GEOMETRY = 0xFF,
     };
-
     enum FieldFlag {
         NOT_NULL_FLAG = 0x0001,
         PRI_KEY_FLAG = 0x0002,
@@ -166,9 +166,10 @@ public:
         uint16_t status;
     };
     struct ResultSetHeader {
-        uint64_t field_number;
+        uint64_t column_number;
+        uint64_t extra_msg;
     };
-    struct Field {
+    struct Column {
         butil::StringPiece catalog;
         butil::StringPiece database;
         butil::StringPiece table;
@@ -181,16 +182,47 @@ public:
         FieldFlag flag;
         uint8_t decimal;
     };
-    union RowField {};
-    struct RowData {
-        butil::StringPiece* fields;
+    class Field {
+    public:
+        int8_t stiny() const;
+        uint8_t tiny() const;
+        int16_t ssmall() const;
+        uint16_t small() const;
+        int32_t sinteger() const;
+        uint32_t integer() const;
+        int64_t sbigint() const;
+        uint64_t bigint() const;
+        float float32() const;
+        double float64() const;
+        const char* c_str() const;
+        butil::StringPiece data() const;
+        bool is_null();
+
+    public:
+        union {
+            int8_t stiny;
+            uint8_t tiny;
+            int16_t ssmall;
+            uint16_t small;
+            int32_t sinteger;
+            uint32_t integer;
+            int64_t sbigint;
+            uint64_t bigint;
+            float float32;
+            double float64;
+            const char* str;
+        } _data;
+        uint64_t _len;
+        bool _is_null;
+    };
+    struct Row {
+        const Field* fields;
     };
     struct ResultSet {
         ResultSetHeader header;
-        Field* fields;
-        uint64_t field_number;
+        const Column* columns;
         Eof eof1;
-        RowData** rows;
+        const Row* const* rows;
         uint64_t row_number;
         Eof eof2;
     };
@@ -200,17 +232,27 @@ public:
     bool ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena);
     void Swap(MysqlReply& other);
     void Print(std::ostream& os) const;
+    // get column number
+    uint64_t column_number() const;
+    // get one column
+    const Column& column(const uint64_t index) const;
+    // get row number
+    uint64_t row_number() const;
+    // get one row
+    const Row& row(const uint64_t index) const;
+    // get one field
+    const Field& field(const Row& row, const uint64_t index) const;
 
 private:
     DISALLOW_COPY_AND_ASSIGN(MysqlReply);
 
     RspType _type;
     union {
-        ResultSet* result_set;
-        Ok* ok;
-        Error* error;
-        Eof* eof;
-        void* padding;  // For swapping
+        const ResultSet* result_set;
+        const Ok* ok;
+        const Error* error;
+        const Eof* eof;
+        const void* padding;  // For swapping
     } _data;
 };
 
@@ -222,6 +264,68 @@ inline void MysqlReply::Swap(MysqlReply& other) {
 inline std::ostream& operator<<(std::ostream& os, const MysqlReply& r) {
     r.Print(os);
     return os;
+}
+
+// get column number
+inline uint64_t MysqlReply::column_number() const {
+    return _data.result_set->header.column_number;
+}
+// get one column
+inline const MysqlReply::Column& MysqlReply::column(const uint64_t index) const {
+    return _data.result_set->columns[index];
+}
+// get row number
+inline uint64_t MysqlReply::row_number() const {
+    return _data.result_set->row_number;
+}
+// get one row
+inline const MysqlReply::Row& MysqlReply::row(const uint64_t index) const {
+    return *_data.result_set->rows[index];
+}
+// get one field
+inline const MysqlReply::Field& MysqlReply::field(const MysqlReply::Row& row,
+                                                  const uint64_t index) const {
+    return row.fields[index];
+}
+
+inline int8_t MysqlReply::Field::stiny() const {
+    return _data.stiny;
+}
+inline uint8_t MysqlReply::Field::tiny() const {
+    return _data.tiny;
+}
+inline int16_t MysqlReply::Field::ssmall() const {
+    return _data.ssmall;
+}
+inline uint16_t MysqlReply::Field::small() const {
+    return _data.small;
+}
+inline int32_t MysqlReply::Field::sinteger() const {
+    return _data.sinteger;
+}
+inline uint32_t MysqlReply::Field::integer() const {
+    return _data.integer;
+}
+inline int64_t MysqlReply::Field::sbigint() const {
+    return _data.sbigint;
+}
+inline uint64_t MysqlReply::Field::bigint() const {
+    return _data.bigint;
+}
+inline float MysqlReply::Field::float32() const {
+    return _data.float32;
+}
+inline double MysqlReply::Field::float64() const {
+    return _data.float64;
+}
+inline const char* MysqlReply::Field::c_str() const {
+    return _data.str;
+}
+inline butil::StringPiece MysqlReply::Field::data() const {
+    return butil::StringPiece(_data.str, _len);
+}
+inline bool MysqlReply::Field::is_null() {
+    return _is_null;
 }
 
 // little endian order to host order
