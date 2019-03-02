@@ -13,20 +13,6 @@ namespace brpc {
         }                                                               \
     } while (0)
 
-const MysqlReply::FieldType SCAN_TYPE_BYTE = MysqlReply::FIELD_TYPE_DECIMAL |
-    MysqlReply::FIELD_TYPE_NEWDECIMAL | MysqlReply::FIELD_TYPE_VARCHAR |
-    MysqlReply::FIELD_TYPE_BIT | MysqlReply::FIELD_TYPE_ENUM | MysqlReply::FIELD_TYPE_SET |
-    MysqlReply::FIELD_TYPE_TINY_BLOB | MysqlReply::FIELD_TYPE_MEDIUM_BLOB |
-    MysqlReply::FIELD_TYPE_LONG_BLOB | MysqlReply::FIELD_TYPE_BLOB |
-    MysqlReply::FIELD_TYPE_VAR_STRING | MysqlReply::FIELD_TYPE_STRING |
-    MysqlReply::FIELD_TYPE_GEOMETRY | MysqlReply::FIELD_TYPE_JSON | MysqlReply::FIELD_TYPE_TIME |
-    MysqlReply::FIELD_TYPE_DATE | MysqlReply::FIELD_TYPE_NEWDATE |
-    MysqlReply::FIELD_TYPE_TIMESTAMP | MysqlReply::FIELD_TYPE_DATETIME;
-const MysqlReply::FieldType SCAN_TYPE_SMALL =
-    MysqlReply::FIELD_TYPE_SHORT | MysqlReply::FIELD_TYPE_YEAR;
-const MysqlReply::FieldType SCAN_TYPE_INTEGER =
-    MysqlReply::FIELD_TYPE_INT24 | MysqlReply::FIELD_TYPE_LONG;
-
 const std::string null_str = "NULL";
 bool ParseHeader(butil::IOBuf& buf, MysqlHeader* value);
 bool ParseEncodeLength(butil::IOBuf& buf, uint64_t* value);
@@ -125,16 +111,69 @@ void MysqlReply::Print(std::ostream& os) const {
                << "].origin_name:" << r.columns[i].origin_name.as_string() << "\ncolumn[" << i
                << "].charset:" << r.columns[i].charset << "\ncolumn[" << i
                << "].length:" << r.columns[i].length << "\ncolumn[" << i
-               << "].type:" << r.columns[i].type << "\ncolumn[" << i
+               << "].type:" << (unsigned)r.columns[i].type << "\ncolumn[" << i
                << "].flag:" << (unsigned)r.columns[i].flag << "\ncolumn[" << i
                << "].decimal:" << (unsigned)r.columns[i].decimal;
         }
         os << "\neof1.warning:" << r.eof1.warning;
         os << "\neof1.status:" << r.eof1.status;
         for (uint64_t i = 0; i < r.row_number; ++i) {
-            for (uint64_t j = 0; j < r.header.column_number; ++j) {
-                if (r.columns[j].type&)
-                // os << "\nrow[" << i << "][" << j << "]:" << r.rows[i]->fields[j];
+          for (uint64_t j = 0; j < r.header.column_number; ++j) {
+            os << "\nrow[" << i << "][" << j << "]:";
+            switch(r.columns[j].type) {
+              case FIELD_TYPE_TINY:
+                if (r.columns[j].flag & MysqlReply::UNSIGNED_FLAG) {os << r.rows[i]->fields[j].tiny();} else {
+                  os << r.rows[i]->fields[j].stiny();
+                }
+                break;
+              case FIELD_TYPE_SHORT:
+              case FIELD_TYPE_YEAR:
+                if (r.columns[j].flag & MysqlReply::UNSIGNED_FLAG) {os << r.rows[i]->fields[j].small();} else {
+                  os << r.rows[i]->fields[j].ssmall();
+                }
+                break;
+              case FIELD_TYPE_INT24:
+              case FIELD_TYPE_LONG:
+                if (r.columns[j].flag & MysqlReply::UNSIGNED_FLAG) {os << r.rows[i]->fields[j].integer();} else {
+                  os << r.rows[i]->fields[j].sinteger();
+                }
+                break;
+              case FIELD_TYPE_LONGLONG:
+                if (r.columns[j].flag & MysqlReply::UNSIGNED_FLAG) {os << r.rows[i]->fields[j].bigint();} else {
+                  os << r.rows[i]->fields[j].sbigint();
+                }
+                break;
+              case FIELD_TYPE_FLOAT:
+                  os << r.rows[i]->fields[j].float32();
+                break;
+              case FIELD_TYPE_DOUBLE:
+                os << r.rows[i]->fields[j].float64();
+                break;
+              case FIELD_TYPE_DECIMAL:
+              case FIELD_TYPE_NEWDECIMAL:
+              case FIELD_TYPE_VARCHAR:
+              case FIELD_TYPE_BIT:
+              case FIELD_TYPE_ENUM:
+              case FIELD_TYPE_SET:
+              case FIELD_TYPE_TINY_BLOB:
+              case FIELD_TYPE_MEDIUM_BLOB:
+              case FIELD_TYPE_LONG_BLOB:
+              case FIELD_TYPE_BLOB:
+              case FIELD_TYPE_VAR_STRING:
+              case FIELD_TYPE_STRING:
+              case FIELD_TYPE_GEOMETRY:
+              case FIELD_TYPE_JSON:
+              case FIELD_TYPE_TIME:
+              case FIELD_TYPE_DATE:
+              case FIELD_TYPE_NEWDATE:
+              case FIELD_TYPE_TIMESTAMP:
+              case FIELD_TYPE_DATETIME:
+                // LOG(INFO) << "sizeof field:" << sizeof(r.rows[i]->fields[j]);
+                os << r.rows[i]->fields[j].data();
+                break;
+              default:
+                os << "Unknown field type";
+            }
             }
         }
         os << "\neof2.warning:" << r.eof2.warning;
@@ -246,6 +285,7 @@ bool ParseColumn(butil::IOBuf& buf, MysqlReply::Column* value, butil::Arena* are
         value->length = mysql_uint4korr(tmp);
     }
     buf.cut1((char*)&value->type);
+    LOG(INFO) << "value->type:" << value->type;
     {
         uint8_t tmp[2];
         buf.cutn(tmp, sizeof(tmp));
@@ -348,69 +388,75 @@ bool ParseTextRow(butil::IOBuf& buf,
         // if field is not null
         butil::IOBuf str;
         buf.cutn(&str, len);
+        LOG(INFO) << "column.len=" << len;
         const MysqlReply::Column& column = columns[i];
+        LOG(INFO) << "column.type=" << (unsigned) column.type;
         switch (column.type) {
-            case MysqlReply::FIELD_TYPE_TINY:
+            case FIELD_TYPE_TINY:
                 if (column.flag & MysqlReply::UNSIGNED_FLAG) {
                     std::istringstream(str.to_string()) >> value[i]._data.tiny;
                 } else {
                     std::istringstream(str.to_string()) >> value[i]._data.stiny;
                 }
                 break;
-            case MysqlReply::FIELD_TYPE_SHORT:
-            case MysqlReply::FIELD_TYPE_YEAR:
+            case FIELD_TYPE_SHORT:
+            case FIELD_TYPE_YEAR:
                 if (column.flag & MysqlReply::UNSIGNED_FLAG) {
                     std::istringstream(str.to_string()) >> value[i]._data.small;
                 } else {
                     std::istringstream(str.to_string()) >> value[i]._data.ssmall;
                 }
                 break;
-            case MysqlReply::FIELD_TYPE_INT24:
-            case MysqlReply::FIELD_TYPE_LONG:
+            case FIELD_TYPE_INT24:
+            case FIELD_TYPE_LONG:
                 if (column.flag & MysqlReply::UNSIGNED_FLAG) {
                     std::istringstream(str.to_string()) >> value[i]._data.integer;
                 } else {
                     std::istringstream(str.to_string()) >> value[i]._data.sinteger;
                 }
                 break;
-            case MysqlReply::FIELD_TYPE_LONGLONG:
+            case FIELD_TYPE_LONGLONG:
                 if (column.flag & MysqlReply::UNSIGNED_FLAG) {
                     std::istringstream(str.to_string()) >> value[i]._data.bigint;
                 } else {
                     std::istringstream(str.to_string()) >> value[i]._data.sbigint;
                 }
                 break;
-            case MysqlReply::FIELD_TYPE_FLOAT:
+            case FIELD_TYPE_FLOAT:
                 std::istringstream(str.to_string()) >> value[i]._data.float32;
                 break;
-            case MysqlReply::FIELD_TYPE_DOUBLE:
+            case FIELD_TYPE_DOUBLE:
                 std::istringstream(str.to_string()) >> value[i]._data.float64;
                 break;
-            case MysqlReply::FIELD_TYPE_DECIMAL:
-            case MysqlReply::FIELD_TYPE_NEWDECIMAL:
-            case MysqlReply::FIELD_TYPE_VARCHAR:
-            case MysqlReply::FIELD_TYPE_BIT:
-            case MysqlReply::FIELD_TYPE_ENUM:
-            case MysqlReply::FIELD_TYPE_SET:
-            case MysqlReply::FIELD_TYPE_TINY_BLOB:
-            case MysqlReply::FIELD_TYPE_MEDIUM_BLOB:
-            case MysqlReply::FIELD_TYPE_LONG_BLOB:
-            case MysqlReply::FIELD_TYPE_BLOB:
-            case MysqlReply::FIELD_TYPE_VAR_STRING:
-            case MysqlReply::FIELD_TYPE_STRING:
-            case MysqlReply::FIELD_TYPE_GEOMETRY:
-            case MysqlReply::FIELD_TYPE_JSON:
-            case MysqlReply::FIELD_TYPE_TIME:
-            case MysqlReply::FIELD_TYPE_DATE:
-            case MysqlReply::FIELD_TYPE_NEWDATE:
-            case MysqlReply::FIELD_TYPE_TIMESTAMP:
-            case MysqlReply::FIELD_TYPE_DATETIME:
+            case FIELD_TYPE_DECIMAL:
+            case FIELD_TYPE_NEWDECIMAL:
+            case FIELD_TYPE_VARCHAR:
+            case FIELD_TYPE_BIT:
+            case FIELD_TYPE_ENUM:
+            case FIELD_TYPE_SET:
+            case FIELD_TYPE_TINY_BLOB:
+            case FIELD_TYPE_MEDIUM_BLOB:
+            case FIELD_TYPE_LONG_BLOB:
+            case FIELD_TYPE_BLOB:
+            case FIELD_TYPE_VAR_STRING:
+            case FIELD_TYPE_STRING:
+            case FIELD_TYPE_GEOMETRY:
+            case FIELD_TYPE_JSON:
+            case FIELD_TYPE_TIME:
+            case FIELD_TYPE_DATE:
+            case FIELD_TYPE_NEWDATE:
+            case FIELD_TYPE_TIMESTAMP:
+          case FIELD_TYPE_DATETIME: {
                 char* d = (char*)arena->allocate(sizeof(char) * len);
                 MY_ERROR_RET(d == NULL);
                 str.copy_to(d);
                 value[i]._data.str = d;
                 value[i]._len = len;
-                break;
+                LOG(INFO) << "len=" << len << " row=" << value[i]._data.str;
+            }
+              break;
+          default:
+            LOG(ERROR) << "Unknown field type";
         }
     }
     return true;

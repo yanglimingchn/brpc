@@ -143,7 +143,7 @@ int main(int argc, char* argv[]) {
         //     // too much sense to run it in this CLI, just quit.
         //     return 0;
         // }
-        char* command = "select submission_date from runoob_tbl where runoob_id=1";
+        char* command = "select * from person";
         access_mysql(channel, command);
         // }
     } else {

@@ -32,14 +32,20 @@ MysqlAuthenticator* g_mysql_authenticator = NULL;
 
 int MysqlAuthenticator::GenerateCredential(std::string* auth_str) const {
     MysqlGreeting greeting;
+    LOG(INFO) << "auth_.size():" << auth_.size();
     auth_.cut1((char*)&greeting.protocol);
-    auth_.cut_until(&greeting.version, MYSQL_STRING_NULL);
+    LOG(INFO) << "protocol=" << (unsigned)greeting.protocol;
+    std::string null_str(1, 0x00);
+    auth_.cut_until(&greeting.version, null_str);
+    LOG(INFO) << "version=" << greeting.version;
     {
         uint8_t buf[4];
         auth_.cutn(buf, 4);
         greeting.thread_id = mysql_uint4korr(buf);
+        LOG(INFO) << "thread_id:" << greeting.thread_id;
     }
     auth_.cut_until(&greeting.salt, MYSQL_STRING_NULL);
+    LOG(INFO) << greeting.salt;
     {
         uint8_t buf[2];
         auth_.cutn(&buf, 2);
@@ -60,9 +66,11 @@ int MysqlAuthenticator::GenerateCredential(std::string* auth_str) const {
     auth_.pop_front(10);
     auth_.cut_until(&greeting.salt2, MYSQL_STRING_NULL);
 
+    LOG(INFO) << greeting.salt2;
+    
     MysqlAuthResponse response;
-    response.capability = (db_ == "" ? 0xa285 : 0xa28d);
-    response.extended_capability = 0x000f;
+    response.capability = (db_ == "" ? 0xa285 : 0xa68d);
+    response.extended_capability = 0x0007;
     response.max_package_length = 16777216UL;
     response.language = 33;
     response.user = user_;
@@ -94,6 +102,7 @@ int MysqlAuthenticator::GenerateCredential(std::string* auth_str) const {
         payload.append(db_);
         payload.push_back('\0');
     }
+    payload.append("mysql_native_password");
     uint32_t payload_size = butil::ByteSwapToLE32(payload.size());
     butil::IOBuf package;
     package.append(&payload_size, 3);

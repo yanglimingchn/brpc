@@ -85,6 +85,7 @@ ParseResult ParseMysqlMessage(butil::IOBuf* source,
             char header[4];
             source->cutn(header, 4);
             uint32_t payload_size = mysql_uint3korr((uint8_t*)header);
+            LOG(INFO) << "payload_size=" << payload_size;
             butil::IOBuf payload;
             source->cutn(&payload, payload_size);
             MysqlAuthenticator* auth = global_mysql_authenticator();

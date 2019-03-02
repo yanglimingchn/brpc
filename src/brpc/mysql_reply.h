@@ -25,7 +25,6 @@ namespace brpc {
 
 const std::string MYSQL_STRING_NULL(1, 0x00);
 
-extern const std::string MYSQL_STRING_NULL;
 struct MysqlGreeting {
     uint8_t protocol;
     butil::IOBuf version;
@@ -54,6 +53,35 @@ struct MysqlHeader {
     uint32_t payload_size;
     uint32_t seq;
 };
+
+const uint8_t        FIELD_TYPE_DECIMAL = 0x00;
+const uint8_t        FIELD_TYPE_TINY = 0x01;
+const uint8_t        FIELD_TYPE_SHORT = 0x02;
+const uint8_t        FIELD_TYPE_LONG = 0x03;
+const uint8_t        FIELD_TYPE_FLOAT = 0x04;
+const uint8_t        FIELD_TYPE_DOUBLE = 0x05;
+const uint8_t        FIELD_TYPE_NULL = 0x06;
+const uint8_t        FIELD_TYPE_TIMESTAMP = 0x07;
+const uint8_t        FIELD_TYPE_LONGLONG = 0x08;
+const uint8_t        FIELD_TYPE_INT24 = 0x09;
+const uint8_t        FIELD_TYPE_DATE = 0x0A;
+const uint8_t        FIELD_TYPE_TIME = 0x0B;
+const uint8_t        FIELD_TYPE_DATETIME = 0x0C;
+const uint8_t        FIELD_TYPE_YEAR = 0x0D;
+const uint8_t        FIELD_TYPE_NEWDATE = 0x0E;
+const uint8_t        FIELD_TYPE_VARCHAR = 0x0F;
+const uint8_t        FIELD_TYPE_BIT = 0x10;
+const uint8_t        FIELD_TYPE_JSON = 0xF5;
+const uint8_t        FIELD_TYPE_NEWDECIMAL = 0xF6;
+const uint8_t        FIELD_TYPE_ENUM = 0xF7;
+const uint8_t        FIELD_TYPE_SET = 0xF8;
+const uint8_t        FIELD_TYPE_TINY_BLOB = 0xF9;
+const uint8_t        FIELD_TYPE_MEDIUM_BLOB = 0xFA;
+const uint8_t        FIELD_TYPE_LONG_BLOB = 0xFB;
+const uint8_t        FIELD_TYPE_BLOB = 0xFC;
+const uint8_t        FIELD_TYPE_VAR_STRING = 0xFD;
+const uint8_t        FIELD_TYPE_STRING = 0xFE;
+const uint8_t        FIELD_TYPE_GEOMETRY = 0xFF;
 
 class MysqlReply {
 public:
@@ -105,36 +133,6 @@ public:
         RSP_RESULTSET = 0x01,
         RSP_EOF = 0xFE,
     };
-    enum FieldType {
-        FIELD_TYPE_DECIMAL = 0x00,
-        FIELD_TYPE_TINY = 0x01,
-        FIELD_TYPE_SHORT = 0x02,
-        FIELD_TYPE_LONG = 0x03,
-        FIELD_TYPE_FLOAT = 0x04,
-        FIELD_TYPE_DOUBLE = 0x05,
-        FIELD_TYPE_NULL = 0x06,
-        FIELD_TYPE_TIMESTAMP = 0x07,
-        FIELD_TYPE_LONGLONG = 0x08,
-        FIELD_TYPE_INT24 = 0x09,
-        FIELD_TYPE_DATE = 0x0A,
-        FIELD_TYPE_TIME = 0x0B,
-        FIELD_TYPE_DATETIME = 0x0C,
-        FIELD_TYPE_YEAR = 0x0D,
-        FIELD_TYPE_NEWDATE = 0x0E,
-        FIELD_TYPE_VARCHAR = 0x0F,
-        FIELD_TYPE_BIT = 0x10,
-        FIELD_TYPE_JSON = 0xF5,
-        FIELD_TYPE_NEWDECIMAL = 0xF6,
-        FIELD_TYPE_ENUM = 0xF7,
-        FIELD_TYPE_SET = 0xF8,
-        FIELD_TYPE_TINY_BLOB = 0xF9,
-        FIELD_TYPE_MEDIUM_BLOB = 0xFA,
-        FIELD_TYPE_LONG_BLOB = 0xFB,
-        FIELD_TYPE_BLOB = 0xFC,
-        FIELD_TYPE_VAR_STRING = 0xFD,
-        FIELD_TYPE_STRING = 0xFE,
-        FIELD_TYPE_GEOMETRY = 0xFF,
-    };
     enum FieldFlag {
         NOT_NULL_FLAG = 0x0001,
         PRI_KEY_FLAG = 0x0002,
@@ -178,45 +176,44 @@ public:
         butil::StringPiece origin_name;
         uint16_t charset;
         uint32_t length;
-        FieldType type;
+        uint8_t type;
         FieldFlag flag;
         uint8_t decimal;
     };
     class Field {
-    public:
-        int8_t stiny() const;
-        uint8_t tiny() const;
-        int16_t ssmall() const;
-        uint16_t small() const;
-        int32_t sinteger() const;
-        uint32_t integer() const;
-        int64_t sbigint() const;
-        uint64_t bigint() const;
-        float float32() const;
-        double float64() const;
-        const char* c_str() const;
-        butil::StringPiece data() const;
-        bool is_null();
+   public:
+      int8_t stiny() const;
+      uint8_t tiny() const;
+      int16_t ssmall() const;
+      uint16_t small() const;
+      int32_t sinteger() const;
+      uint32_t integer() const;
+      int64_t sbigint() const;
+      uint64_t bigint() const;
+      float float32() const;
+      double float64() const;
+      butil::StringPiece data() const;
+      bool is_null();
 
-    public:
-        union {
-            int8_t stiny;
-            uint8_t tiny;
-            int16_t ssmall;
-            uint16_t small;
-            int32_t sinteger;
-            uint32_t integer;
-            int64_t sbigint;
-            uint64_t bigint;
-            float float32;
-            double float64;
-            const char* str;
-        } _data;
-        uint64_t _len;
-        bool _is_null;
+   public:
+      union {
+        int8_t stiny;
+        uint8_t tiny;
+        int16_t ssmall;
+        uint16_t small;
+        int32_t sinteger;
+        uint32_t integer;
+        int64_t sbigint;
+        uint64_t bigint;
+        float float32;
+        double float64;
+        const char* str;
+      } _data;
+      uint64_t _len;
+      bool _is_null;
     };
     struct Row {
-        const Field* fields;
+      const Field* fields;
     };
     struct ResultSet {
         ResultSetHeader header;
@@ -318,9 +315,9 @@ inline float MysqlReply::Field::float32() const {
 inline double MysqlReply::Field::float64() const {
     return _data.float64;
 }
-inline const char* MysqlReply::Field::c_str() const {
-    return _data.str;
-}
+/* inline const char* MysqlReply::Field::c_str() const { */
+/*     return _data.str; */
+/* } */
 inline butil::StringPiece MysqlReply::Field::data() const {
     return butil::StringPiece(_data.str, _len);
 }
