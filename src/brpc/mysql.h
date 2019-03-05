@@ -120,7 +120,13 @@ public:
     void Swap(MysqlResponse* other);
     // Parse and consume intact replies from the buf.
     // Returns true on success, false otherwise.
-    bool ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_greeting = false);
+    bool ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_auth = false);
+
+    // Number of replies in this response.
+    // (May have more than one reply due to pipeline)
+    int reply_size() const {
+        return _nreply;
+    }
 
     const MysqlReply& reply(int index) const {
         return _reply;
@@ -154,9 +160,9 @@ private:
     void SetCachedSize(int size) const;
 
     MysqlReply _reply;
-    // MysqlReply* _other_replies;
+    MysqlReply* _other_replies;
     butil::Arena _arena;
-    // int _nreply;
+    int _nreply;
     mutable int _cached_size_;
 
     friend void protobuf_AddDesc_baidu_2frpc_2fmysql_5fbase_2eproto_impl();

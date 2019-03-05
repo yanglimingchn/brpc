@@ -412,53 +412,48 @@ void MysqlResponse::Swap(MysqlResponse* other) {
 
 // ===================================================================
 
-bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_greeting) {
-    char header[4];
-    const uint8_t* p = (const uint8_t*)buf.fetch(header, sizeof(header));
-    if (NULL == p) {
-        return false;
-    }
-    uint32_t payload_size = mysql_uint3korr(p);
-    if (buf.size() < 4 + payload_size || payload_size <= 0) {
-        return false;
-    }
-
-    // if (reply_size() == 0)
-    if (is_greeting) {
-        return true;
-    }
-
+bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_auth) {
     size_t oldsize = buf.size();
-    {
-        if (!_reply.ConsumePartialIOBuf(buf, &_arena)) {
+    if (reply_size() == 0) {
+        if (!_reply.ConsumePartialIOBuf(buf, &_arena, is_auth)) {
+            LOG(ERROR) << "mysql reply parse error";
             return false;
         }
         const size_t newsize = buf.size();
         _cached_size_ += oldsize - newsize;
         oldsize = newsize;
-        // ++_nreply;
+        ++_nreply;
     }
-    // if (reply_count > 1) {
-    //     if (_other_replies == NULL) {
-    //         _other_replies = (MysqlReply*)_arena.allocate(sizeof(MysqlReply) * (reply_count -
-    //         1)); if (_other_replies == NULL) {
-    //             LOG(ERROR) << "Fail to allocate MysqlReply[" << reply_count - 1 << "]";
-    //             return false;
-    //         }
-    //         for (int i = 0; i < reply_count - 1; ++i) {
-    //             new (&_other_replies[i]) MysqlReply;
-    //         }
-    //     }
-    //     for (int i = reply_size(); i < reply_count; ++i) {
-    //         if (!_other_replies[i - 1].ConsumePartialIOBuf(buf, &_arena)) {
-    //             return false;
-    //         }
-    //         const size_t newsize = buf.size();
-    //         _cached_size_ += oldsize - newsize;
-    //         oldsize = newsize;
-    //         ++_nreply;
-    //     }
-    // }
+    uint16_t status;
+    switch (_reply.type()) {
+        case RSP_OK:
+            status = _reply.status();
+        case RSP_RESULTSET:
+        case RSP_EOF:
+        default:
+            return true;
+    }
+    if (reply_count > 1) {
+        if (_other_replies == NULL) {
+            _other_replies = (MysqlReply*)_arena.allocate(sizeof(MysqlReply) * (reply_count - 1));
+            if (_other_replies == NULL) {
+                LOG(ERROR) << "Fail to allocate MysqlReply[" << reply_count - 1 << "]";
+                return false;
+            }
+            for (int i = 0; i < reply_count - 1; ++i) {
+                new (&_other_replies[i]) MysqlReply;
+            }
+        }
+        for (int i = reply_size(); i < reply_count; ++i) {
+            if (!_other_replies[i - 1].ConsumePartialIOBuf(buf, &_arena)) {
+                return false;
+            }
+            const size_t newsize = buf.size();
+            _cached_size_ += oldsize - newsize;
+            oldsize = newsize;
+            ++_nreply;
+        }
+    }
     return true;
 }
 

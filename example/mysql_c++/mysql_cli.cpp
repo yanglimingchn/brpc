@@ -42,20 +42,25 @@ static bool access_mysql(brpc::Channel& channel, const char* command) {
         LOG(ERROR) << "Fail to add command";
         return false;
     }
-    brpc::MysqlResponse response;
-    brpc::Controller cntl;
-    channel.CallMethod(NULL, &cntl, &request, &response, NULL);
-    if (cntl.Failed()) {
-        LOG(ERROR) << "Fail to access mysql, " << cntl.ErrorText();
-        return false;
-    } else {
-        // for (uint64_t i = 0; i < response.reply(0).column_number(); ++i) {
-        //     const brpc::MysqlReply::Column& column = response.reply(0).column(i);
-        //     std::cout << column.catalog() << std::endl;
-        //     std::cout << column.charset() << std::endl;
+    for (int i = 0; i < 10; ++i) {
+        brpc::MysqlResponse response;
+        brpc::Controller cntl;
+        channel.CallMethod(NULL, &cntl, &request, &response, NULL);
+        if (!cntl.Failed()) {
+            std::cout << response << std::endl;
+        }
+        // if (cntl.Failed()) {
+        //     LOG(ERROR) << "Fail to access mysql, " << cntl.ErrorText();
+        //     return false;
+        // } else {
+        //     // for (uint64_t i = 0; i < response.reply(0).column_number(); ++i) {
+        //     //     const brpc::MysqlReply::Column* column = response.reply(0).column(i);
+        //     //     std::cout << column->catalog() << std::endl;
+        //     //     std::cout << column->charset() << std::endl;
+        //     // }
+        //     std::cout << response << std::endl;
+        //     return true;
         // }
-        std::cout << response << std::endl;
-        return true;
     }
 }
 
@@ -95,7 +100,7 @@ int main(int argc, char* argv[]) {
     options.timeout_ms = FLAGS_timeout_ms /*milliseconds*/;
     options.max_retry = FLAGS_max_retry;
     options.auth = brpc::policy::global_mysql_authenticator("yangliming01", "123456", "test");
-    if (channel.Init(FLAGS_server.c_str(), 3306, &options) != 0) {
+    if (channel.Init("127.0.0.1", 3306, &options) != 0) {
         LOG(ERROR) << "Fail to initialize channel";
         return -1;
     }
@@ -116,43 +121,40 @@ int main(int argc, char* argv[]) {
             " talking to mysql-server. The output and behavior is "
             "not exactly same with the official one.\n\n");
 
-        // for (;;) {
-        char prompt[64];
-        // snprintf(prompt, sizeof(prompt), "mysql %s> ", FLAGS_server.c_str());
-        // std::unique_ptr<char, Freer> command(readline(prompt));
-        // LOG(ERROR) << "Fail to access mysql, " << prompt;
-        // if (command == NULL || *command == '\0') {
-        //     if (g_canceled) {
-        //         // No input after the prompt and user pressed Ctrl-C,
-        //         // quit the CLI.
-        //         return 0;
-        //     }
-        //     // User entered an empty command by just pressing Enter.
-        //     continue;
-        // }
-        // if (g_canceled) {
-        //     // User entered sth. and pressed Ctrl-C, start a new prompt.
-        //     g_canceled = false;
-        //     continue;
-        // }
-        // // Add user's command to history so that it's browse-able by
-        // // UP-key and search-able by Ctrl-R.
-        // add_history(command.get());
+        for (;;) {
+            char prompt[128];
+            snprintf(prompt, sizeof(prompt), "mysql %s> ", FLAGS_server.c_str());
+            std::unique_ptr<char, Freer> command(readline(prompt));
+            LOG(ERROR) << "Fail to access mysql, " << prompt;
+            if (command == NULL || *command == '\0') {
+                if (g_canceled) {
+                    // No input after the prompt and user pressed Ctrl-C,
+                    // quit the CLI.
+                    return 0;
+                }
+                // User entered an empty command by just pressing Enter.
+                continue;
+            }
+            if (g_canceled) {
+                // User entered sth. and pressed Ctrl-C, start a new prompt.
+                g_canceled = false;
+                continue;
+            }
+            // Add user's command to history so that it's browse-able by
+            // UP-key and search-able by Ctrl-R.
+            add_history(command.get());
 
-        // if (!strcmp(command.get(), "help")) {
-        //     printf("This is a mysql CLI written in brpc.\n");
-        //     continue;
-        // }
-        // if (!strcmp(command.get(), "quit")) {
-        //     // Although quit is a valid mysql command, it does not make
-        //     // too much sense to run it in this CLI, just quit.
-        //     return 0;
-        // }
-        char* command =
-            "insert into runoob_tbl(runoob_title, runoob_author, submission_date, age) values "
-            "('zxvcsdfsd', 'xxxxxxx', now(), 58), ('zxvcsdfsd', 'xxxxxxx', now(), 58)";
-        access_mysql(channel, command);
-        // }
+            if (!strcmp(command.get(), "help")) {
+                printf("This is a mysql CLI written in brpc.\n");
+                continue;
+            }
+            if (!strcmp(command.get(), "quit")) {
+                // Although quit is a valid mysql command, it does not make
+                // too much sense to run it in this CLI, just quit.
+                return 0;
+            }
+            access_mysql(channel, command.get());
+        }
     } else {
         std::string command;
         command.reserve(argc * 16);

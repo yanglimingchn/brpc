@@ -24,21 +24,7 @@
 
 namespace brpc {
 
-const std::string MYSQL_STRING_NULL(1, 0x00);
-
-struct MysqlGreeting {
-    uint8_t protocol;
-    butil::IOBuf version;
-    uint32_t thread_id;
-    butil::IOBuf salt;
-    uint16_t capability;
-    uint8_t language;
-    uint16_t status;
-    uint16_t extended_capability;
-    uint8_t auth_plugin_length;
-    butil::IOBuf salt2;
-    // butil::IOBuf auth_plugin;
-};
+const std::string mysql_null_terminator = std::string(1, 0x00);
 
 struct MysqlAuthResponse {
     uint16_t capability;
@@ -60,6 +46,7 @@ enum MysqlRspType {
     RSP_ERROR = 0xFF,
     RSP_RESULTSET = 0x01,
     RSP_EOF = 0xFE,
+    RSP_AUTH = 0xFB,  // add for mysql auth
 };
 
 enum MysqlFieldType {
@@ -152,9 +139,50 @@ enum MysqlServerStatus {
 };
 
 const char* MysqlFieldTypeToString(MysqlFieldType);
+const char* MysqlRspTypeToString(MysqlRspType);
 
 class MysqlReply {
 public:
+    // Mysql Auth package
+    class Auth {
+    public:
+        Auth(const uint8_t protocol,
+             const butil::StringPiece version,
+             const uint32_t thread_id,
+             const butil::StringPiece salt,
+             const uint16_t capability,
+             const uint8_t language,
+             const uint16_t status,
+             const uint16_t extended_capability,
+             const uint8_t auth_plugin_length,
+             const butil::StringPiece salt2);
+        uint8_t protocol() const;
+        butil::StringPiece version() const;
+        uint32_t thread_id() const;
+        butil::StringPiece salt() const;
+        uint16_t capability() const;
+        uint8_t language() const;
+        uint16_t status() const;
+        uint16_t extended_capability() const;
+        uint8_t auth_plugin_length() const;
+        butil::StringPiece salt2() const;
+
+    private:
+        bool parseAuth(butil::IOBuf& buf, butil::Arena* arena);
+        DISALLOW_COPY_AND_ASSIGN(Auth);
+        friend class MysqlReply;
+        uint8_t _protocol;
+        butil::StringPiece _version;
+        uint32_t _thread_id;
+        butil::StringPiece _salt;
+        uint16_t _capability;
+        uint8_t _language;
+        uint16_t _status;
+        uint16_t _extended_capability;
+        uint8_t _auth_plugin_length;
+        butil::StringPiece _salt2;
+        // butil::IOBuf auth_plugin;
+    };
     // Mysql Ok package
     class Ok {
     public:
@@ -205,7 +233,7 @@ public:
         uint16_t _status;
     };
     // Mysql Column
-    struct Column {
+    class Column {
     public:
         butil::StringPiece catalog() const;
         butil::StringPiece database() const;
@@ -307,9 +335,21 @@ public:
 
 public:
     MysqlReply(){};
-    bool ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena);
+    bool ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena, const bool is_auth);
     void Swap(MysqlReply& other);
     void Print(std::ostream& os) const;
+    // response type
+    MysqlRspType type() const;
+    // get auth
+    const Auth* auth() const;
+    const Ok* ok() const;
+    const Error* error() const;
+    const Eof* eof() const;
+    bool is_auth() const;
+    bool is_ok() const;
+    bool is_error() const;
+    bool is_eof() const;
+    bool is_resultset() const;
     // get column number
     uint64_t column_number() const;
     // get one column
@@ -344,6 +384,7 @@ private:
     // member values
     MysqlRspType _type;
     union {
+        const Auth* auth;
         const ResultSet* result_set;
         const Ok* ok;
         const Error* error;
@@ -363,26 +404,90 @@ inline std::ostream& operator<<(std::ostream& os, const MysqlReply& r) {
     r.Print(os);
     return os;
 }
+
+inline MysqlRspType MysqlReply::type() const {
+    return _type;
+}
+
+inline const MysqlReply::Auth* MysqlReply::auth() const {
+    if (is_auth()) {
+        return _data.auth;
+    }
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an auth";
+    return NULL;
+}
+inline const MysqlReply::Ok* MysqlReply::ok() const {
+    if (is_ok()) {
+        return _data.ok;
+    }
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an ok";
+    return NULL;
+}
+inline const MysqlReply::Error* MysqlReply::error() const {
+    if (is_error()) {
+        return _data.error;
+    }
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an error";
+    return NULL;
+}
+inline const MysqlReply::Eof* MysqlReply::eof() const {
+    if (is_eof()) {
+        return _data.eof;
+    }
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an eof";
+    return NULL;
+}
+inline bool MysqlReply::is_auth() const {
+    return _type == RSP_AUTH;
+}
+inline bool MysqlReply::is_ok() const {
+    return _type == RSP_OK;
+}
+inline bool MysqlReply::is_error() const {
+    return _type == RSP_ERROR;
+}
+inline bool MysqlReply::is_eof() const {
+    return _type == RSP_EOF;
+}
+inline bool MysqlReply::is_resultset() const {
+    return _type == RSP_RESULTSET;
+}
 inline uint64_t MysqlReply::column_number() const {
-    return _data.result_set->_header._column_number;
+    if (is_resultset()) {
+        return _data.result_set->_header._column_number;
+    }
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
+    return 0;
 }
 inline const MysqlReply::Column* MysqlReply::column(const uint64_t index) const {
-    if (index < 0 || index > _data.result_set->_header._column_number) {
-        LOG(ERROR) << "wrong index, must between [0, " << _data.result_set->_header._column_number
-                   << ")";
-        return NULL;
+    if (is_resultset()) {
+        if (index < 0 || index > _data.result_set->_header._column_number) {
+            LOG(ERROR) << "wrong index, must between [0, "
+                       << _data.result_set->_header._column_number << ")";
+            return NULL;
+        }
+        return _data.result_set->_columns + index;
     }
-    return _data.result_set->_columns + index;
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
+    return NULL;
 }
 inline uint64_t MysqlReply::row_number() const {
-    return _data.result_set->_row_number;
+    if (is_resultset()) {
+        return _data.result_set->_row_number;
+    }
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
+    return 0;
 }
 inline const MysqlReply::Row* MysqlReply::row(const uint64_t index) const {
-    if (index < 0 || index > _data.result_set->_row_number) {
-        LOG(ERROR) << "wrong index, must between [0, " << _data.result_set->_row_number << ")";
-        return NULL;
+    if (is_resultset()) {
+        if (index < 0 || index > _data.result_set->_row_number) {
+            LOG(ERROR) << "wrong index, must between [0, " << _data.result_set->_row_number << ")";
+            return NULL;
+        }
+        return *_data.result_set->_rows + index;
     }
-    return *_data.result_set->_rows + index;
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
+    return NULL;
 }
 inline const MysqlReply::Field* MysqlReply::Row::field(const uint64_t index) const {
     if (index < 0 || index > _field_number) {
@@ -390,6 +495,37 @@ inline const MysqlReply::Field* MysqlReply::Row::field(const uint64_t index) con
         return NULL;
     }
     return _fields + index;
+}
+// mysql auth
+inline uint8_t MysqlReply::Auth::protocol() const {
+    return _protocol;
+}
+inline butil::StringPiece MysqlReply::Auth::version() const {
+    return _version;
+}
+inline uint32_t MysqlReply::Auth::thread_id() const {
+    return _thread_id;
+}
+inline butil::StringPiece MysqlReply::Auth::salt() const {
+    return _salt;
+}
+inline uint16_t MysqlReply::Auth::capability() const {
+    return _capability;
+}
+inline uint8_t MysqlReply::Auth::language() const {
+    return _language;
+}
+inline uint16_t MysqlReply::Auth::status() const {
+    return _status;
+}
+inline uint16_t MysqlReply::Auth::extended_capability() const {
+    return _extended_capability;
+}
+inline uint8_t MysqlReply::Auth::auth_plugin_length() const {
+    return _auth_plugin_length;
+}
+inline butil::StringPiece MysqlReply::Auth::salt2() const {
+    return _salt2;
 }
 // mysql reply ok
 inline uint64_t MysqlReply::Ok::affect_row() const {
@@ -529,9 +665,6 @@ inline double MysqlReply::Field::float64() const {
     CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an float64";
     return 0;
 }
-/* inline const char* MysqlReply::Field::c_str() const { */
-/*     return _data.str; */
-/* } */
 inline butil::StringPiece MysqlReply::Field::string() const {
     if (is_string()) {
         return _data.str;
@@ -539,7 +672,6 @@ inline butil::StringPiece MysqlReply::Field::string() const {
     CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an string";
     return butil::StringPiece();
 }
-
 inline bool MysqlReply::Field::is_stiny() const {
     return _type == FIELD_TYPE_TINY && !_is_unsigned;
 }
@@ -583,21 +715,17 @@ inline bool MysqlReply::Field::is_string() const {
 inline bool MysqlReply::Field::is_null() const {
     return _is_null;
 }
-
 // little endian order to host order
 inline uint16_t mysql_uint2korr(const uint8_t* A) {
     return (uint16_t)(((uint16_t)(A[0])) + ((uint16_t)(A[1]) << 8));
 }
-
 inline uint32_t mysql_uint3korr(const uint8_t* A) {
     return (uint32_t)(((uint32_t)(A[0])) + (((uint32_t)(A[1])) << 8) + (((uint32_t)(A[2])) << 16));
 }
-
 inline uint32_t mysql_uint4korr(const uint8_t* A) {
     return (uint32_t)(((uint32_t)(A[0])) + (((uint32_t)(A[1])) << 8) + (((uint32_t)(A[2])) << 16) +
                       (((uint32_t)(A[3])) << 24));
 }
-
 inline uint64_t mysql_uint8korr(const uint8_t* A) {
     return (uint64_t)(((uint64_t)(A[0])) + (((uint64_t)(A[1])) << 8) + (((uint64_t)(A[2])) << 16) +
                       (((uint64_t)(A[3])) << 24) + (((uint64_t)(A[4])) << 32) +

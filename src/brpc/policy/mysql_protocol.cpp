@@ -82,15 +82,12 @@ ParseResult ParseMysqlMessage(butil::IOBuf* source,
         }
 
         if (pi.with_auth) {
-            char header[4];
-            source->cutn(header, 4);
-            uint32_t payload_size = mysql_uint3korr((uint8_t*)header);
-            LOG(INFO) << "payload_size=" << payload_size;
-            butil::IOBuf payload;
-            source->cutn(&payload, payload_size);
+            if (FLAGS_mysql_verbose) {
+                LOG(INFO) << "\n[MYSQL RESPONSE] " << msg->response;
+            }
             MysqlAuthenticator* auth = global_mysql_authenticator();
-            if (auth->CurrStep() == MYSQL_AUTH_STEP_ONE) {  // receive greeting & send auth
-                auth->raw_auth() = payload;
+            if (auth->CurrStep() == MYSQL_AUTH_STEP_ONE) {  // receive auth & send auth
+                auth->SaveAuth(msg->response.reply(0).auth());
                 std::string auth_data;
                 if (auth->GenerateCredential(&auth_data) != 0) {
                     LOG(INFO) << "[MYSQL PARSE] authentication step one";

@@ -79,8 +79,28 @@ const char* MysqlFieldTypeToString(MysqlFieldType type) {
             return "string";
         case FIELD_TYPE_GEOMETRY:
             return "geometry";
+        default:
+            return "Unknown Field Type";
     }
 }
+
+const char* MysqlRspTypeToString(MysqlRspType type) {
+    switch (type) {
+        case RSP_OK:
+            return "ok";
+        case RSP_ERROR:
+            return "error";
+        case RSP_RESULTSET:
+            return "resultset";
+        case RSP_EOF:
+            return "eof";
+        case RSP_AUTH:
+            return "auth";
+        default:
+            return "Unknown Response Type";
+    }
+}
+
 bool ParseHeader(butil::IOBuf& buf, MysqlHeader* value) {
     {
         uint8_t tmp[3];
@@ -117,10 +137,18 @@ bool ParseEncodeLength(butil::IOBuf& buf, uint64_t* value) {
     return true;
 }
 
-bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena) {
+bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena, const bool is_auth) {
     uint8_t header[5];
     const uint8_t* p = (const uint8_t*)buf.fetch(header, sizeof(header));
     uint8_t type = p[4];
+    if (is_auth && type != 0x00) {
+        _type = RSP_AUTH;
+        Auth* auth = (Auth*)alloc_and_init(arena, sizeof(Auth));
+        MY_ALLOC_CHECK(auth);
+        MY_PARSE_CHECK(auth->parseAuth(buf, arena));
+        _data.auth = auth;
+        return true;
+    }
     if (type == 0x00) {
         _type = RSP_OK;
         Ok* ok = (Ok*)alloc_and_init(arena, sizeof(Ok));
@@ -177,13 +205,22 @@ bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena) {
         MY_PARSE_CHECK(r._eof2.parseEof(buf));
         _data.result_set = result_set;
     } else {
+        LOG(ERROR) << "Unknown Response Type";
         return false;
     }
     return true;
 }
 
 void MysqlReply::Print(std::ostream& os) const {
-    if (_type == RSP_OK) {
+    if (_type == RSP_AUTH) {
+        const Auth& auth = *_data.auth;
+        os << "\nprotocol:" << (unsigned)auth._protocol << "\nversion:" << auth._version.as_string()
+           << "\nthread_id:" << auth._thread_id << "\nsalt:" << auth._salt.as_string()
+           << "\ncapacity:" << auth._capability << "\nlanguage:" << (unsigned)auth._language
+           << "\nstatus:" << auth._status << "\nextended_capacity:" << auth._extended_capability
+           << "\nauth_plugin_length:" << auth._auth_plugin_length
+           << "\nsalt2:" << auth._salt2.as_string();
+    } else if (_type == RSP_OK) {
         const Ok& ok = *_data.ok;
         os << "\naffect_row:" << ok._affect_row << "\nindex:" << ok._index
            << "\nstatus:" << ok._status << "\nwarning:" << ok._warning
@@ -281,7 +318,90 @@ void MysqlReply::Print(std::ostream& os) const {
     } else if (_type == RSP_EOF) {
         const Eof& e = *_data.eof;
         os << "\nwarning:" << e._warning << "\nstatus:" << e._status;
+    } else {
+        os << "Unknown response type";
     }
+}
+
+MysqlReply::Auth::Auth(const uint8_t protocol,
+                       const butil::StringPiece version,
+                       const uint32_t thread_id,
+                       const butil::StringPiece salt,
+                       const uint16_t capability,
+                       const uint8_t language,
+                       const uint16_t status,
+                       const uint16_t extended_capability,
+                       const uint8_t auth_plugin_length,
+                       const butil::StringPiece salt2) {
+    std::string* p = NULL;
+    _protocol = protocol;
+    p = new std::string(version.data(), version.size());
+    _version.set(p->data(), p->size());
+    _thread_id = thread_id;
+    p = new std::string(salt.data(), salt.size());
+    _salt.set(p->data(), p->size());
+    _capability = capability;
+    _language = language;
+    _status = status;
+    _extended_capability = extended_capability;
+    _auth_plugin_length = auth_plugin_length;
+    p = new std::string(salt2.data(), salt2.size());
+    _salt2.set(p->data(), p->size());
+}
+
+bool MysqlReply::Auth::parseAuth(butil::IOBuf& buf, butil::Arena* arena) {
+    MysqlHeader header;
+    ParseHeader(buf, &header);
+    buf.cut1((char*)&_protocol);
+    {
+        butil::IOBuf version;
+        buf.cut_until(&version, mysql_null_terminator);
+        char* d = (char*)alloc_and_init(arena, version.size());
+        MY_ALLOC_CHECK(d);
+        version.copy_to(d);
+        _version.set(d, version.size());
+    }
+    {
+        uint8_t tmp[4];
+        buf.cutn(tmp, sizeof(tmp));
+        _thread_id = mysql_uint4korr(tmp);
+    }
+    {
+        butil::IOBuf salt;
+        buf.cut_until(&salt, mysql_null_terminator);
+        char* d = (char*)alloc_and_init(arena, salt.size());
+        MY_ALLOC_CHECK(d);
+        salt.copy_to(d);
+        _salt.set(d, salt.size());
+    }
+    {
+        uint8_t tmp[2];
+        buf.cutn(&tmp, sizeof(tmp));
+        _capability = mysql_uint2korr(tmp);
+    }
+    buf.cut1((char*)&_language);
+    {
+        uint8_t tmp[2];
+        buf.cutn(tmp, sizeof(tmp));
+        _status = mysql_uint2korr(tmp);
+    }
+    {
+        uint8_t tmp[2];
+        buf.cutn(tmp, sizeof(tmp));
+        _extended_capability = mysql_uint2korr(tmp);
+    }
+    buf.cut1((char*)&_auth_plugin_length);
+    buf.pop_front(10);
+    {
+        butil::IOBuf salt2;
+        buf.cut_until(&salt2, mysql_null_terminator);
+        char* d = (char*)alloc_and_init(arena, salt2.size());
+        MY_ALLOC_CHECK(d);
+        salt2.copy_to(d);
+        _salt2.set(d, salt2.size());
+    }
+    buf.clear();  // consume all buf
+    return true;
 }
 
 bool MysqlReply::ResultSetHeader::parseResultHeader(butil::IOBuf& buf) {

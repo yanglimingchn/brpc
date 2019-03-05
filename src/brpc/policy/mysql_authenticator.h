@@ -19,10 +19,11 @@
 
 #include "butil/iobuf.h"
 #include "brpc/authenticator.h"
+#include "brpc/mysql_reply.h"
 
 namespace brpc {
 namespace policy {
-
+// auth step 1)greeting 2) response 3) ok
 enum MysqlAuthStep {
     MYSQL_AUTH_STEP_ONE,
     MYSQL_AUTH_STEP_TWO,
@@ -31,7 +32,7 @@ enum MysqlAuthStep {
 class MysqlAuthenticator : public Authenticator {
 public:
     MysqlAuthenticator(const std::string& user, const std::string& passwd, const std::string& db)
-        : user_(user), passwd_(passwd), db_(db), step_(MYSQL_AUTH_STEP_ONE) {}
+        : _user(user), _passwd(passwd), _db(db), _step(MYSQL_AUTH_STEP_ONE) {}
 
     int GenerateCredential(std::string* auth_str) const;
 
@@ -39,30 +40,31 @@ public:
         return 0;
     }
 
-    MysqlAuthStep CurrStep() const {
-        return step_;
-    }
-
-    void NextStep() {
-        step_ = MYSQL_AUTH_STEP_TWO;
-    }
-
-    butil::IOBuf& raw_req() const {
-        return req_;
-    }
-
-    butil::IOBuf& raw_auth() {
-        return auth_;
-    }
+    void SaveAuth(const MysqlReply::Auth* auth);
+    MysqlAuthStep CurrStep() const;
+    void NextStep();
+    butil::IOBuf& raw_req() const;
 
 private:
-    const std::string user_;
-    const std::string passwd_;
-    const std::string db_;
-    MysqlAuthStep step_;
-    mutable butil::IOBuf req_;
-    mutable butil::IOBuf auth_;
+    const std::string _user;
+    const std::string _passwd;
+    const std::string _db;
+    MysqlAuthStep _step;
+    mutable butil::IOBuf _req;
+    const MysqlReply::Auth* _auth;
 };
+
+inline MysqlAuthStep MysqlAuthenticator::CurrStep() const {
+    return _step;
+}
+
+inline void MysqlAuthenticator::NextStep() {
+    _step = MYSQL_AUTH_STEP_TWO;
+}
+
+inline butil::IOBuf& MysqlAuthenticator::raw_req() const {
+    return _req;
+}
 
 const Authenticator* global_mysql_authenticator(const std::string& user,
                                                 const std::string& passwd,

@@ -31,75 +31,31 @@ MysqlAuthenticator* g_mysql_authenticator = NULL;
 };
 
 int MysqlAuthenticator::GenerateCredential(std::string* auth_str) const {
-    MysqlGreeting greeting;
-    LOG(INFO) << "auth_.size():" << auth_.size();
-    auth_.cut1((char*)&greeting.protocol);
-    LOG(INFO) << "protocol=" << (unsigned)greeting.protocol;
-    std::string null_str(1, 0x00);
-    auth_.cut_until(&greeting.version, null_str);
-    LOG(INFO) << "version=" << greeting.version;
-    {
-        uint8_t buf[4];
-        auth_.cutn(buf, 4);
-        greeting.thread_id = mysql_uint4korr(buf);
-        LOG(INFO) << "thread_id:" << greeting.thread_id;
-    }
-    auth_.cut_until(&greeting.salt, MYSQL_STRING_NULL);
-    LOG(INFO) << greeting.salt;
-    {
-        uint8_t buf[2];
-        auth_.cutn(&buf, 2);
-        greeting.capability = mysql_uint2korr(buf);
-    }
-    auth_.cut1((char*)&greeting.language);
-    {
-        uint8_t buf[2];
-        auth_.cutn(buf, 2);
-        greeting.status = mysql_uint2korr(buf);
-    }
-    {
-        uint8_t buf[2];
-        auth_.cutn(buf, 2);
-        greeting.extended_capability = mysql_uint2korr(buf);
-    }
-    auth_.cut1((char*)&greeting.auth_plugin_length);
-    auth_.pop_front(10);
-    auth_.cut_until(&greeting.salt2, MYSQL_STRING_NULL);
-
-    LOG(INFO) << greeting.salt2;
-
-    MysqlAuthResponse response;
-    response.capability = (db_ == "" ? 0xa285 : 0xa68d);
-    response.extended_capability = 0x0007;
-    response.max_package_length = 16777216UL;
-    response.language = 33;
-    response.user = user_;
-    {
-        butil::IOBuf salt;
-        salt.append(greeting.salt);
-        salt.append(greeting.salt2);
-        std::string data =
-            mysql_build_mysql41_authentication_response(salt.to_string(), "", passwd_, "");
-        response.salt = data;
-    }
-    response.schema = db_;
+    uint16_t capability = (_db == "" ? 0xa285 : 0xa68d);
+    uint16_t extended_capability = 0x0007;
+    uint32_t max_package_length = 16777216UL;
+    uint8_t language = 33;
+    butil::IOBuf salt;
+    salt.append(_auth->salt().data(), _auth->salt().size());
+    salt.append(_auth->salt2().data(), _auth->salt2().size());
+    salt = mysql_build_mysql41_authentication_response(salt.to_string(), "", _passwd, "");
 
     butil::IOBuf payload;
-    uint16_t capability = butil::ByteSwapToLE16(response.capability);
+    capability = butil::ByteSwapToLE16(capability);
     payload.append(&capability, 2);
-    uint16_t extended_capability = butil::ByteSwapToLE16(response.extended_capability);
-    payload.append(&response.extended_capability, 2);
-    uint32_t max_package_length = butil::ByteSwapToLE32(response.max_package_length);
+    extended_capability = butil::ByteSwapToLE16(extended_capability);
+    payload.append(&extended_capability, 2);
+    max_package_length = butil::ByteSwapToLE32(max_package_length);
     payload.append(&max_package_length, 4);
-    payload.append(&response.language, 1);
+    payload.append(&language, 1);
     for (int i = 0; i < 23; ++i)
-        payload.push_back(MYSQL_STRING_NULL[0]);
-    payload.append(response.user);
+        payload.push_back(mysql_null_terminator[0]);
+    payload.append(_user);
     payload.push_back('\0');
-    payload.push_back((uint8_t)(response.salt.size()));
-    payload.append(response.salt);
-    if (db_ != "") {
-        payload.append(db_);
+    payload.push_back((uint8_t)(salt.size()));
+    payload.append(salt);
+    if (_db != "") {
+        payload.append(_db);
         payload.push_back('\0');
     }
     // payload.append("mysql_native_password");
@@ -110,6 +66,19 @@ int MysqlAuthenticator::GenerateCredential(std::string* auth_str) const {
     package.append(payload);
     *auth_str = package.to_string();
     return 0;
+}
+
+void MysqlAuthenticator::SaveAuth(const MysqlReply::Auth* auth) {
+    _auth = new MysqlReply::Auth(auth->protocol(),
+                                 auth->version(),
+                                 auth->thread_id(),
+                                 auth->salt(),
+                                 auth->capability(),
+                                 auth->language(),
+                                 auth->status(),
+                                 auth->extended_capability(),
+                                 auth->auth_plugin_length(),
+                                 auth->salt2());
 }
 
 MysqlAuthenticator* global_mysql_authenticator() {
