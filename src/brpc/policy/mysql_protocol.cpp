@@ -156,10 +156,6 @@ void ProcessMysqlResponse(InputMessageBase* msg_base) {
         }
     }  // silently ignore the response.
 
-    if (FLAGS_mysql_verbose) {
-        LOG(INFO) << "\n[MYSQL RESPONSE] ";
-    }
-
     // Unlocks correlation_id inside. Revert controller's
     // error code if it version check of `cid' fails
     msg.reset();  // optional, just release resourse ASAP

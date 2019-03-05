@@ -20,6 +20,7 @@
 #include "butil/iobuf.h"  // butil::IOBuf
 #include "butil/arena.h"
 #include "butil/sys_byteorder.h"
+#include "butil/logging.h"  // LOG()
 
 namespace brpc {
 
@@ -54,174 +55,254 @@ struct MysqlHeader {
     uint32_t seq;
 };
 
-const uint8_t        FIELD_TYPE_DECIMAL = 0x00;
-const uint8_t        FIELD_TYPE_TINY = 0x01;
-const uint8_t        FIELD_TYPE_SHORT = 0x02;
-const uint8_t        FIELD_TYPE_LONG = 0x03;
-const uint8_t        FIELD_TYPE_FLOAT = 0x04;
-const uint8_t        FIELD_TYPE_DOUBLE = 0x05;
-const uint8_t        FIELD_TYPE_NULL = 0x06;
-const uint8_t        FIELD_TYPE_TIMESTAMP = 0x07;
-const uint8_t        FIELD_TYPE_LONGLONG = 0x08;
-const uint8_t        FIELD_TYPE_INT24 = 0x09;
-const uint8_t        FIELD_TYPE_DATE = 0x0A;
-const uint8_t        FIELD_TYPE_TIME = 0x0B;
-const uint8_t        FIELD_TYPE_DATETIME = 0x0C;
-const uint8_t        FIELD_TYPE_YEAR = 0x0D;
-const uint8_t        FIELD_TYPE_NEWDATE = 0x0E;
-const uint8_t        FIELD_TYPE_VARCHAR = 0x0F;
-const uint8_t        FIELD_TYPE_BIT = 0x10;
-const uint8_t        FIELD_TYPE_JSON = 0xF5;
-const uint8_t        FIELD_TYPE_NEWDECIMAL = 0xF6;
-const uint8_t        FIELD_TYPE_ENUM = 0xF7;
-const uint8_t        FIELD_TYPE_SET = 0xF8;
-const uint8_t        FIELD_TYPE_TINY_BLOB = 0xF9;
-const uint8_t        FIELD_TYPE_MEDIUM_BLOB = 0xFA;
-const uint8_t        FIELD_TYPE_LONG_BLOB = 0xFB;
-const uint8_t        FIELD_TYPE_BLOB = 0xFC;
-const uint8_t        FIELD_TYPE_VAR_STRING = 0xFD;
-const uint8_t        FIELD_TYPE_STRING = 0xFE;
-const uint8_t        FIELD_TYPE_GEOMETRY = 0xFF;
+enum MysqlRspType {
+    RSP_OK = 0x00,
+    RSP_ERROR = 0xFF,
+    RSP_RESULTSET = 0x01,
+    RSP_EOF = 0xFE,
+};
+
+enum MysqlFieldType {
+    FIELD_TYPE_DECIMAL = 0x00,
+    FIELD_TYPE_TINY = 0x01,
+    FIELD_TYPE_SHORT = 0x02,
+    FIELD_TYPE_LONG = 0x03,
+    FIELD_TYPE_FLOAT = 0x04,
+    FIELD_TYPE_DOUBLE = 0x05,
+    FIELD_TYPE_NULL = 0x06,
+    FIELD_TYPE_TIMESTAMP = 0x07,
+    FIELD_TYPE_LONGLONG = 0x08,
+    FIELD_TYPE_INT24 = 0x09,
+    FIELD_TYPE_DATE = 0x0A,
+    FIELD_TYPE_TIME = 0x0B,
+    FIELD_TYPE_DATETIME = 0x0C,
+    FIELD_TYPE_YEAR = 0x0D,
+    FIELD_TYPE_NEWDATE = 0x0E,
+    FIELD_TYPE_VARCHAR = 0x0F,
+    FIELD_TYPE_BIT = 0x10,
+    FIELD_TYPE_JSON = 0xF5,
+    FIELD_TYPE_NEWDECIMAL = 0xF6,
+    FIELD_TYPE_ENUM = 0xF7,
+    FIELD_TYPE_SET = 0xF8,
+    FIELD_TYPE_TINY_BLOB = 0xF9,
+    FIELD_TYPE_MEDIUM_BLOB = 0xFA,
+    FIELD_TYPE_LONG_BLOB = 0xFB,
+    FIELD_TYPE_BLOB = 0xFC,
+    FIELD_TYPE_VAR_STRING = 0xFD,
+    FIELD_TYPE_STRING = 0xFE,
+    FIELD_TYPE_GEOMETRY = 0xFF,
+};
+
+enum MysqlFieldFlag {
+    NOT_NULL_FLAG = 0x0001,
+    PRI_KEY_FLAG = 0x0002,
+    UNIQUE_KEY_FLAG = 0x0004,
+    MULTIPLE_KEY_FLAG = 0x0008,
+    BLOB_FLAG = 0x0010,
+    UNSIGNED_FLAG = 0x0020,
+    ZEROFILL_FLAG = 0x0040,
+    BINARY_FLAG = 0x0080,
+    ENUM_FLAG = 0x0100,
+    AUTO_INCREMENT_FLAG = 0x0200,
+    TIMESTAMP_FLAG = 0x0400,
+    SET_FLAG = 0x0800,
+};
+
+enum MysqlServerStatus {
+    SERVER_STATUS_IN_TRANS = 1,
+    SERVER_STATUS_AUTOCOMMIT = 2,   /* Server in auto_commit mode */
+    SERVER_MORE_RESULTS_EXISTS = 8, /* Multi query - next query exists */
+    SERVER_QUERY_NO_GOOD_INDEX_USED = 16,
+    SERVER_QUERY_NO_INDEX_USED = 32,
+    /**
+      The server was able to fulfill the clients request and opened a
+      read-only non-scrollable cursor for a query. This flag comes
+      in reply to COM_STMT_EXECUTE and COM_STMT_FETCH commands.
+    */
+    SERVER_STATUS_CURSOR_EXISTS = 64,
+    /**
+      This flag is sent when a read-only cursor is exhausted, in reply to
+      COM_STMT_FETCH command.
+    */
+    SERVER_STATUS_LAST_ROW_SENT = 128,
+    SERVER_STATUS_DB_DROPPED = 256, /* A database was dropped */
+    SERVER_STATUS_NO_BACKSLASH_ESCAPES = 512,
+    /**
+      Sent to the client if after a prepared statement reprepare
+      we discovered that the new statement returns a different
+      number of result set columns.
+    */
+    SERVER_STATUS_METADATA_CHANGED = 1024,
+    SERVER_QUERY_WAS_SLOW = 2048,
+
+    /**
+      To mark ResultSet containing output parameter values.
+    */
+    SERVER_PS_OUT_PARAMS = 4096,
+
+    /**
+      Set at the same time as SERVER_STATUS_IN_TRANS if the started
+      multi-statement transaction is a read-only transaction. Cleared
+      when the transaction commits or aborts. Since this flag is sent
+      to clients in OK and EOF packets, the flag indicates the
+      transaction status at the end of command execution.
+    */
+    SERVER_STATUS_IN_TRANS_READONLY = 8192,
+    SERVER_SESSION_STATE_CHANGED = 1UL << 14,
+};
+
+const char* MysqlFieldTypeToString(MysqlFieldType);
 
 class MysqlReply {
 public:
-    enum ServerStatus {
-        SERVER_STATUS_IN_TRANS = 1,
-        SERVER_STATUS_AUTOCOMMIT = 2,   /* Server in auto_commit mode */
-        SERVER_MORE_RESULTS_EXISTS = 8, /* Multi query - next query exists */
-        SERVER_QUERY_NO_GOOD_INDEX_USED = 16,
-        SERVER_QUERY_NO_INDEX_USED = 32,
-        /**
-          The server was able to fulfill the clients request and opened a
-          read-only non-scrollable cursor for a query. This flag comes
-          in reply to COM_STMT_EXECUTE and COM_STMT_FETCH commands.
-        */
-        SERVER_STATUS_CURSOR_EXISTS = 64,
-        /**
-          This flag is sent when a read-only cursor is exhausted, in reply to
-          COM_STMT_FETCH command.
-        */
-        SERVER_STATUS_LAST_ROW_SENT = 128,
-        SERVER_STATUS_DB_DROPPED = 256, /* A database was dropped */
-        SERVER_STATUS_NO_BACKSLASH_ESCAPES = 512,
-        /**
-          Sent to the client if after a prepared statement reprepare
-          we discovered that the new statement returns a different
-          number of result set columns.
-        */
-        SERVER_STATUS_METADATA_CHANGED = 1024,
-        SERVER_QUERY_WAS_SLOW = 2048,
+    // Mysql Ok package
+    class Ok {
+    public:
+        uint64_t affect_row() const;
+        uint64_t index() const;
+        uint16_t status() const;
+        uint16_t warning() const;
+        butil::StringPiece msg() const;
 
-        /**
-          To mark ResultSet containing output parameter values.
-        */
-        SERVER_PS_OUT_PARAMS = 4096,
+    private:
+        bool parseOk(butil::IOBuf& buf, butil::Arena* arena);
+        DISALLOW_COPY_AND_ASSIGN(Ok);
+        friend class MysqlReply;
+        uint64_t _affect_row;
+        uint64_t _index;
+        uint16_t _status;
+        uint16_t _warning;
+        butil::StringPiece _msg;
+    };
+    // Mysql Error package
+    class Error {
+    public:
+        uint16_t errcode() const;
+        butil::StringPiece status() const;
+        butil::StringPiece msg() const;
 
-        /**
-          Set at the same time as SERVER_STATUS_IN_TRANS if the started
-          multi-statement transaction is a read-only transaction. Cleared
-          when the transaction commits or aborts. Since this flag is sent
-          to clients in OK and EOF packets, the flag indicates the
-          transaction status at the end of command execution.
-        */
-        SERVER_STATUS_IN_TRANS_READONLY = 8192,
-        SERVER_SESSION_STATE_CHANGED = 1UL << 14,
+    private:
+        bool parseError(butil::IOBuf& buf, butil::Arena* arena);
+        DISALLOW_COPY_AND_ASSIGN(Error);
+        friend class MysqlReply;
+        uint16_t _errcode;
+        butil::StringPiece _status;
+        butil::StringPiece _msg;
     };
-    enum RspType {
-        RSP_OK = 0x00,
-        RSP_ERROR = 0xFF,
-        RSP_RESULTSET = 0x01,
-        RSP_EOF = 0xFE,
+    // Mysql Eof package
+    class Eof {
+    public:
+        Eof() {}
+        uint16_t warning() const;
+        uint16_t status() const;
+
+    private:
+        bool parseEof(butil::IOBuf& buf);
+        bool isEof(const butil::IOBuf& buf);
+        DISALLOW_COPY_AND_ASSIGN(Eof);
+        friend class MysqlReply;
+        uint16_t _warning;
+        uint16_t _status;
     };
-    enum FieldFlag {
-        NOT_NULL_FLAG = 0x0001,
-        PRI_KEY_FLAG = 0x0002,
-        UNIQUE_KEY_FLAG = 0x0004,
-        MULTIPLE_KEY_FLAG = 0x0008,
-        BLOB_FLAG = 0x0010,
-        UNSIGNED_FLAG = 0x0020,
-        ZEROFILL_FLAG = 0x0040,
-        BINARY_FLAG = 0x0080,
-        ENUM_FLAG = 0x0100,
-        AUTO_INCREMENT_FLAG = 0x0200,
-        TIMESTAMP_FLAG = 0x0400,
-        SET_FLAG = 0x0800,
-    };
-    struct Ok {
-        uint64_t affect_row;
-        uint64_t index;
-        uint16_t status;
-        uint16_t warning;
-        butil::StringPiece msg;
-    };
-    struct Error {
-        uint16_t errcode;
-        butil::StringPiece status;
-        butil::StringPiece msg;
-    };
-    struct Eof {
-        uint16_t warning;
-        uint16_t status;
-    };
-    struct ResultSetHeader {
-        uint64_t column_number;
-        uint64_t extra_msg;
-    };
+    // Mysql Column
     struct Column {
-        butil::StringPiece catalog;
-        butil::StringPiece database;
-        butil::StringPiece table;
-        butil::StringPiece origin_table;
-        butil::StringPiece name;
-        butil::StringPiece origin_name;
-        uint16_t charset;
-        uint32_t length;
-        uint8_t type;
-        FieldFlag flag;
-        uint8_t decimal;
-    };
-    class Field {
-   public:
-      int8_t stiny() const;
-      uint8_t tiny() const;
-      int16_t ssmall() const;
-      uint16_t small() const;
-      int32_t sinteger() const;
-      uint32_t integer() const;
-      int64_t sbigint() const;
-      uint64_t bigint() const;
-      float float32() const;
-      double float64() const;
-      butil::StringPiece data() const;
-      bool is_null();
+    public:
+        butil::StringPiece catalog() const;
+        butil::StringPiece database() const;
+        butil::StringPiece table() const;
+        butil::StringPiece origin_table() const;
+        butil::StringPiece name() const;
+        butil::StringPiece origin_name() const;
+        uint16_t charset() const;
+        uint32_t length() const;
+        MysqlFieldType type() const;
+        MysqlFieldFlag flag() const;
+        uint8_t decimal() const;
 
-   public:
-      union {
-        int8_t stiny;
-        uint8_t tiny;
-        int16_t ssmall;
-        uint16_t small;
-        int32_t sinteger;
-        uint32_t integer;
-        int64_t sbigint;
-        uint64_t bigint;
-        float float32;
-        double float64;
-        const char* str;
-      } _data;
-      uint64_t _len;
-      bool _is_null;
+    private:
+        bool parseColumn(butil::IOBuf& buf, butil::Arena* arena);
+        DISALLOW_COPY_AND_ASSIGN(Column);
+        friend class MysqlReply;
+
+        butil::StringPiece _catalog;
+        butil::StringPiece _database;
+        butil::StringPiece _table;
+        butil::StringPiece _origin_table;
+        butil::StringPiece _name;
+        butil::StringPiece _origin_name;
+        uint16_t _charset;
+        uint32_t _length;
+        MysqlFieldType _type;
+        MysqlFieldFlag _flag;
+        uint8_t _decimal;
     };
-    struct Row {
-      const Field* fields;
+    // Mysql Row
+    class Field;
+    class Row {
+    public:
+        const Field* field(const uint64_t index) const;
+
+    private:
+        bool parseTextRow(butil::IOBuf& buf,
+                          MysqlReply::Field* value,
+                          const MysqlReply::Column* column,
+                          const uint64_t column_number,
+                          butil::Arena* arena);
+        DISALLOW_COPY_AND_ASSIGN(Row);
+        friend class MysqlReply;
+
+        const Field* _fields;
+        uint64_t _field_number;
     };
-    struct ResultSet {
-        ResultSetHeader header;
-        const Column* columns;
-        Eof eof1;
-        const Row* const* rows;
-        uint64_t row_number;
-        Eof eof2;
+    // Mysql Field
+    class Field {
+    public:
+        int8_t stiny() const;
+        uint8_t tiny() const;
+        int16_t ssmall() const;
+        uint16_t small() const;
+        int32_t sinteger() const;
+        uint32_t integer() const;
+        int64_t sbigint() const;
+        uint64_t bigint() const;
+        float float32() const;
+        double float64() const;
+        butil::StringPiece string() const;
+
+        bool is_stiny() const;
+        bool is_tiny() const;
+        bool is_ssmall() const;
+        bool is_small() const;
+        bool is_sinteger() const;
+        bool is_integer() const;
+        bool is_sbigint() const;
+        bool is_bigint() const;
+        bool is_float32() const;
+        bool is_float64() const;
+        bool is_string() const;
+        bool is_null() const;
+
+    private:
+        bool parseField(butil::IOBuf& buf, const MysqlReply::Column* column, butil::Arena* arena);
+        DISALLOW_COPY_AND_ASSIGN(Field);
+        friend class Row;
+
+        union {
+            int8_t stiny;
+            uint8_t tiny;
+            int16_t ssmall;
+            uint16_t small;
+            int32_t sinteger;
+            uint32_t integer;
+            int64_t sbigint;
+            uint64_t bigint;
+            float float32;
+            double float64;
+            butil::StringPiece str;
+        } _data;
+        MysqlFieldType _type;
+        bool _is_null;
+        bool _is_unsigned;
     };
 
 public:
@@ -232,18 +313,36 @@ public:
     // get column number
     uint64_t column_number() const;
     // get one column
-    const Column& column(const uint64_t index) const;
+    const Column* column(const uint64_t index) const;
     // get row number
     uint64_t row_number() const;
     // get one row
-    const Row& row(const uint64_t index) const;
-    // get one field
-    const Field& field(const Row& row, const uint64_t index) const;
+    const Row* row(const uint64_t index) const;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(MysqlReply);
+    // Mysql result set header
+    struct ResultSetHeader {
+        bool parseResultHeader(butil::IOBuf& buf);
+        uint64_t _column_number;
+        uint64_t _extra_msg;
 
-    RspType _type;
+    private:
+        DISALLOW_COPY_AND_ASSIGN(ResultSetHeader);
+    };
+    // Mysql result set
+    struct ResultSet {
+        ResultSetHeader _header;
+        const Column* _columns;
+        Eof _eof1;
+        const Row* const* _rows;
+        uint64_t _row_number;
+        Eof _eof2;
+
+    private:
+        DISALLOW_COPY_AND_ASSIGN(ResultSet);
+    };
+    // member values
+    MysqlRspType _type;
     union {
         const ResultSet* result_set;
         const Ok* ok;
@@ -251,77 +350,237 @@ private:
         const Eof* eof;
         const void* padding;  // For swapping
     } _data;
+
+    DISALLOW_COPY_AND_ASSIGN(MysqlReply);
 };
 
+// mysql reply
 inline void MysqlReply::Swap(MysqlReply& other) {
     std::swap(_type, other._type);
     std::swap(_data.padding, other._data.padding);
 }
-
 inline std::ostream& operator<<(std::ostream& os, const MysqlReply& r) {
     r.Print(os);
     return os;
 }
-
-// get column number
 inline uint64_t MysqlReply::column_number() const {
-    return _data.result_set->header.column_number;
+    return _data.result_set->_header._column_number;
 }
-// get one column
-inline const MysqlReply::Column& MysqlReply::column(const uint64_t index) const {
-    return _data.result_set->columns[index];
+inline const MysqlReply::Column* MysqlReply::column(const uint64_t index) const {
+    if (index < 0 || index > _data.result_set->_header._column_number) {
+        LOG(ERROR) << "wrong index, must between [0, " << _data.result_set->_header._column_number
+                   << ")";
+        return NULL;
+    }
+    return _data.result_set->_columns + index;
 }
-// get row number
 inline uint64_t MysqlReply::row_number() const {
-    return _data.result_set->row_number;
+    return _data.result_set->_row_number;
 }
-// get one row
-inline const MysqlReply::Row& MysqlReply::row(const uint64_t index) const {
-    return *_data.result_set->rows[index];
+inline const MysqlReply::Row* MysqlReply::row(const uint64_t index) const {
+    if (index < 0 || index > _data.result_set->_row_number) {
+        LOG(ERROR) << "wrong index, must between [0, " << _data.result_set->_row_number << ")";
+        return NULL;
+    }
+    return *_data.result_set->_rows + index;
 }
-// get one field
-inline const MysqlReply::Field& MysqlReply::field(const MysqlReply::Row& row,
-                                                  const uint64_t index) const {
-    return row.fields[index];
+inline const MysqlReply::Field* MysqlReply::Row::field(const uint64_t index) const {
+    if (index < 0 || index > _field_number) {
+        LOG(ERROR) << "wrong index, must between [0, " << _field_number << ")";
+        return NULL;
+    }
+    return _fields + index;
 }
-
+// mysql reply ok
+inline uint64_t MysqlReply::Ok::affect_row() const {
+    return _affect_row;
+}
+inline uint64_t MysqlReply::Ok::index() const {
+    return _index;
+}
+inline uint16_t MysqlReply::Ok::status() const {
+    return _status;
+}
+inline uint16_t MysqlReply::Ok::warning() const {
+    return _warning;
+}
+inline butil::StringPiece MysqlReply::Ok::msg() const {
+    return _msg;
+}
+// mysql reply error
+inline uint16_t MysqlReply::Error::errcode() const {
+    return _errcode;
+}
+inline butil::StringPiece MysqlReply::Error::status() const {
+    return _status;
+}
+inline butil::StringPiece MysqlReply::Error::msg() const {
+    return _msg;
+}
+// mysql reply eof
+inline uint16_t MysqlReply::Eof::warning() const {
+    return _warning;
+}
+inline uint16_t MysqlReply::Eof::status() const {
+    return _status;
+}
+// mysql reply column
+inline butil::StringPiece MysqlReply::Column::catalog() const {
+    return _catalog;
+}
+inline butil::StringPiece MysqlReply::Column::database() const {
+    return _database;
+}
+inline butil::StringPiece MysqlReply::Column::table() const {
+    return _table;
+}
+inline butil::StringPiece MysqlReply::Column::origin_table() const {
+    return _origin_table;
+}
+inline butil::StringPiece MysqlReply::Column::name() const {
+    return _name;
+}
+inline butil::StringPiece MysqlReply::Column::origin_name() const {
+    return _origin_name;
+}
+inline uint16_t MysqlReply::Column::charset() const {
+    return _charset;
+}
+inline uint32_t MysqlReply::Column::length() const {
+    return _length;
+}
+inline MysqlFieldType MysqlReply::Column::type() const {
+    return _type;
+}
+inline MysqlFieldFlag MysqlReply::Column::flag() const {
+    return _flag;
+}
+inline uint8_t MysqlReply::Column::decimal() const {
+    return _decimal;
+}
+// mysql reply field
 inline int8_t MysqlReply::Field::stiny() const {
-    return _data.stiny;
+    if (is_stiny()) {
+        return _data.stiny;
+    }
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an stiny";
+    return 0;
 }
 inline uint8_t MysqlReply::Field::tiny() const {
-    return _data.tiny;
+    if (is_tiny()) {
+        return _data.tiny;
+    }
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an tiny";
+    return 0;
 }
 inline int16_t MysqlReply::Field::ssmall() const {
-    return _data.ssmall;
+    if (is_ssmall()) {
+        return _data.ssmall;
+    }
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an ssmall";
+    return 0;
 }
 inline uint16_t MysqlReply::Field::small() const {
-    return _data.small;
+    if (is_small()) {
+        return _data.small;
+    }
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an small";
+    return 0;
 }
 inline int32_t MysqlReply::Field::sinteger() const {
-    return _data.sinteger;
+    if (is_sinteger()) {
+        return _data.sinteger;
+    }
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an sinteger";
+    return 0;
 }
 inline uint32_t MysqlReply::Field::integer() const {
-    return _data.integer;
+    if (is_integer()) {
+        return _data.integer;
+    }
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an integer";
+    return 0;
 }
 inline int64_t MysqlReply::Field::sbigint() const {
-    return _data.sbigint;
+    if (is_sbigint()) {
+        return _data.sbigint;
+    }
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an sbigint";
+    return 0;
 }
 inline uint64_t MysqlReply::Field::bigint() const {
-    return _data.bigint;
+    if (is_bigint()) {
+        return _data.bigint;
+    }
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an bigint";
+    return 0;
 }
 inline float MysqlReply::Field::float32() const {
-    return _data.float32;
+    if (is_float32()) {
+        return _data.float32;
+    }
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an float32";
+    return 0;
 }
 inline double MysqlReply::Field::float64() const {
-    return _data.float64;
+    if (is_float64()) {
+        return _data.float64;
+    }
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an float64";
+    return 0;
 }
 /* inline const char* MysqlReply::Field::c_str() const { */
 /*     return _data.str; */
 /* } */
-inline butil::StringPiece MysqlReply::Field::data() const {
-    return butil::StringPiece(_data.str, _len);
+inline butil::StringPiece MysqlReply::Field::string() const {
+    if (is_string()) {
+        return _data.str;
+    }
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an string";
+    return butil::StringPiece();
 }
-inline bool MysqlReply::Field::is_null() {
+
+inline bool MysqlReply::Field::is_stiny() const {
+    return _type == FIELD_TYPE_TINY && !_is_unsigned;
+}
+inline bool MysqlReply::Field::is_tiny() const {
+    return _type == FIELD_TYPE_TINY && _is_unsigned;
+}
+inline bool MysqlReply::Field::is_ssmall() const {
+    return (_type == FIELD_TYPE_SHORT || _type == FIELD_TYPE_YEAR) && !_is_unsigned;
+}
+inline bool MysqlReply::Field::is_small() const {
+    return (_type == FIELD_TYPE_SHORT || _type == FIELD_TYPE_YEAR) && _is_unsigned;
+}
+inline bool MysqlReply::Field::is_sinteger() const {
+    return (_type == FIELD_TYPE_INT24 || _type == FIELD_TYPE_LONG) && !_is_unsigned;
+}
+inline bool MysqlReply::Field::is_integer() const {
+    return (_type == FIELD_TYPE_INT24 || _type == FIELD_TYPE_LONG) && _is_unsigned;
+}
+inline bool MysqlReply::Field::is_sbigint() const {
+    return _type == FIELD_TYPE_LONGLONG && !_is_unsigned;
+}
+inline bool MysqlReply::Field::is_bigint() const {
+    return _type == FIELD_TYPE_LONGLONG && _is_unsigned;
+}
+inline bool MysqlReply::Field::is_float32() const {
+    return _type == FIELD_TYPE_FLOAT;
+}
+inline bool MysqlReply::Field::is_float64() const {
+    return _type == FIELD_TYPE_DOUBLE;
+}
+inline bool MysqlReply::Field::is_string() const {
+    return _type == FIELD_TYPE_DECIMAL || _type == FIELD_TYPE_NEWDECIMAL ||
+        _type == FIELD_TYPE_VARCHAR || _type == FIELD_TYPE_BIT || _type == FIELD_TYPE_ENUM ||
+        _type == FIELD_TYPE_SET || _type == FIELD_TYPE_TINY_BLOB ||
+        _type == FIELD_TYPE_MEDIUM_BLOB || _type == FIELD_TYPE_LONG_BLOB ||
+        _type == FIELD_TYPE_BLOB || _type == FIELD_TYPE_VAR_STRING || _type == FIELD_TYPE_STRING ||
+        _type == FIELD_TYPE_GEOMETRY || _type == FIELD_TYPE_JSON || _type == FIELD_TYPE_TIME ||
+        _type == FIELD_TYPE_DATE || _type == FIELD_TYPE_NEWDATE || _type == FIELD_TYPE_TIMESTAMP ||
+        _type == FIELD_TYPE_DATETIME;
+}
+inline bool MysqlReply::Field::is_null() const {
     return _is_null;
 }
 

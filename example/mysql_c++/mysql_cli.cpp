@@ -49,6 +49,11 @@ static bool access_mysql(brpc::Channel& channel, const char* command) {
         LOG(ERROR) << "Fail to access mysql, " << cntl.ErrorText();
         return false;
     } else {
+        // for (uint64_t i = 0; i < response.reply(0).column_number(); ++i) {
+        //     const brpc::MysqlReply::Column& column = response.reply(0).column(i);
+        //     std::cout << column.catalog() << std::endl;
+        //     std::cout << column.charset() << std::endl;
+        // }
         std::cout << response << std::endl;
         return true;
     }
@@ -143,7 +148,9 @@ int main(int argc, char* argv[]) {
         //     // too much sense to run it in this CLI, just quit.
         //     return 0;
         // }
-        char* command = "select * from person";
+        char* command =
+            "insert into runoob_tbl(runoob_title, runoob_author, submission_date, age) values "
+            "('zxvcsdfsd', 'xxxxxxx', now(), 58), ('zxvcsdfsd', 'xxxxxxx', now(), 58)";
         access_mysql(channel, command);
         // }
     } else {

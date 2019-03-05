@@ -67,7 +67,7 @@ int MysqlAuthenticator::GenerateCredential(std::string* auth_str) const {
     auth_.cut_until(&greeting.salt2, MYSQL_STRING_NULL);
 
     LOG(INFO) << greeting.salt2;
-    
+
     MysqlAuthResponse response;
     response.capability = (db_ == "" ? 0xa285 : 0xa68d);
     response.extended_capability = 0x0007;
@@ -102,7 +102,7 @@ int MysqlAuthenticator::GenerateCredential(std::string* auth_str) const {
         payload.append(db_);
         payload.push_back('\0');
     }
-    payload.append("mysql_native_password");
+    // payload.append("mysql_native_password");
     uint32_t payload_size = butil::ByteSwapToLE32(payload.size());
     butil::IOBuf package;
     package.append(&payload_size, 3);
