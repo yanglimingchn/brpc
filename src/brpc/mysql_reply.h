@@ -26,15 +26,15 @@ namespace brpc {
 
 const std::string mysql_null_terminator = std::string(1, 0x00);
 
-struct MysqlAuthResponse {
-    uint16_t capability;
-    uint16_t extended_capability;
-    uint32_t max_package_length;
-    uint8_t language;
-    butil::IOBuf user;
-    butil::IOBuf salt;
-    butil::IOBuf schema;
-};
+// struct MysqlAuthResponse {
+//     uint16_t capability;
+//     uint16_t extended_capability;
+//     uint32_t max_package_length;
+//     uint8_t language;
+//     butil::IOBuf user;
+//     butil::IOBuf salt;
+//     butil::IOBuf schema;
+// };
 
 struct MysqlHeader {
     uint32_t payload_size;
@@ -46,7 +46,8 @@ enum MysqlRspType {
     RSP_ERROR = 0xFF,
     RSP_RESULTSET = 0x01,
     RSP_EOF = 0xFE,
-    RSP_AUTH = 0xFB,  // add for mysql auth
+    RSP_AUTH = 0xFB,     // add for mysql auth
+    RSP_UNKNOWN = 0xFC,  // add for error case
 };
 
 enum MysqlFieldType {
@@ -334,8 +335,11 @@ public:
     };
 
 public:
-    MysqlReply(){};
-    bool ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena, const bool is_auth);
+    MysqlReply();
+    bool ConsumePartialIOBuf(butil::IOBuf& buf,
+                             butil::Arena* arena,
+                             const bool is_auth,
+                             bool* is_multi);
     void Swap(MysqlReply& other);
     void Print(std::ostream& os) const;
     // response type
@@ -396,6 +400,10 @@ private:
 };
 
 // mysql reply
+inline MysqlReply::MysqlReply() {
+    _type = RSP_UNKNOWN;
+    _data.padding = NULL;
+}
 inline void MysqlReply::Swap(MysqlReply& other) {
     std::swap(_type, other._type);
     std::swap(_data.padding, other._data.padding);
@@ -404,11 +412,9 @@ inline std::ostream& operator<<(std::ostream& os, const MysqlReply& r) {
     r.Print(os);
     return os;
 }
-
 inline MysqlRspType MysqlReply::type() const {
     return _type;
 }
-
 inline const MysqlReply::Auth* MysqlReply::auth() const {
     if (is_auth()) {
         return _data.auth;

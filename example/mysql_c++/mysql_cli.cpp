@@ -38,16 +38,20 @@ const char* logo();
 // Send `command' to mysql-server via `channel'
 static bool access_mysql(brpc::Channel& channel, const char* command) {
     brpc::MysqlRequest request;
+    LOG(INFO) << "command=" << command;
     if (!request.Query(command)) {
         LOG(ERROR) << "Fail to add command";
         return false;
     }
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 1; ++i) {
         brpc::MysqlResponse response;
         brpc::Controller cntl;
         channel.CallMethod(NULL, &cntl, &request, &response, NULL);
         if (!cntl.Failed()) {
             std::cout << response << std::endl;
+        } else {
+            LOG(ERROR) << "Fail to access mysql, " << cntl.ErrorText();
+            return false;
         }
         // if (cntl.Failed()) {
         //     LOG(ERROR) << "Fail to access mysql, " << cntl.ErrorText();

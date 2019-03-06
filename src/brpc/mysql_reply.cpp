@@ -137,9 +137,16 @@ bool ParseEncodeLength(butil::IOBuf& buf, uint64_t* value) {
     return true;
 }
 
-bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena, const bool is_auth) {
+bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf,
+                                     butil::Arena* arena,
+                                     const bool is_auth,
+                                     bool* is_multi) {
+    LOG(INFO) << "reply consume buf";
     uint8_t header[5];
     const uint8_t* p = (const uint8_t*)buf.fetch(header, sizeof(header));
+    if (p == NULL) {
+        return false;
+    }
     uint8_t type = p[4];
     if (is_auth && type != 0x00) {
         _type = RSP_AUTH;
@@ -155,6 +162,7 @@ bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena, con
         MY_ALLOC_CHECK(ok);
         MY_PARSE_CHECK(ok->parseOk(buf, arena));
         _data.ok = ok;
+        *is_multi = _data.ok->status() & SERVER_MORE_RESULTS_EXISTS;
     } else if (type == 0xFF) {
         _type = RSP_ERROR;
         Error* error = (Error*)alloc_and_init(arena, sizeof(Error));
@@ -167,6 +175,7 @@ bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena, con
         MY_ALLOC_CHECK(eof);
         MY_PARSE_CHECK(eof->parseEof(buf));
         _data.eof = eof;
+        *is_multi = _data.eof->status() & SERVER_MORE_RESULTS_EXISTS;
     } else if (type >= 0x01 && type <= 0xFA) {
         _type = RSP_RESULTSET;
         ResultSet* result_set = (ResultSet*)alloc_and_init(arena, sizeof(ResultSet));
@@ -204,6 +213,7 @@ bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena, con
         r._row_number = rows.size();
         MY_PARSE_CHECK(r._eof2.parseEof(buf));
         _data.result_set = result_set;
+        *is_multi = r._eof2.status() & SERVER_MORE_RESULTS_EXISTS;
     } else {
         LOG(ERROR) << "Unknown Response Type";
         return false;

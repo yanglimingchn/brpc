@@ -309,7 +309,11 @@ MysqlResponse::MysqlResponse(const MysqlResponse& from) : ::google::protobuf::Me
     MergeFrom(from);
 }
 
-void MysqlResponse::SharedCtor() {}
+void MysqlResponse::SharedCtor() {
+    _other_replies = NULL;
+    _nreply = 0;
+    _cached_size_ = 0;
+}
 
 MysqlResponse::~MysqlResponse() {
     SharedDtor();
@@ -320,7 +324,9 @@ void MysqlResponse::SharedDtor() {
     }
 }
 
-void MysqlResponse::SetCachedSize(int size) const {}
+void MysqlResponse::SetCachedSize(int size) const {
+    _cached_size_ = size;
+}
 const ::google::protobuf::Descriptor* MysqlResponse::descriptor() {
     protobuf_AssignDescriptorsOnce();
     return MysqlResponse_descriptor_;
@@ -394,10 +400,10 @@ bool MysqlResponse::IsInitialized() const {
 
 void MysqlResponse::Swap(MysqlResponse* other) {
     if (other != this) {
-        _reply.Swap(other->_reply);
-        // std::swap(_other_replies, other->_other_replies);
+        _first_reply.Swap(other->_first_reply);
+        std::swap(_other_replies, other->_other_replies);
         _arena.swap(other->_arena);
-        // std::swap(_nreply, other->_nreply);
+        std::swap(_nreply, other->_nreply);
         std::swap(_cached_size_, other->_cached_size_);
     }
 }
@@ -413,9 +419,14 @@ void MysqlResponse::Swap(MysqlResponse* other) {
 // ===================================================================
 
 bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_auth) {
+    const int max_replies = 10;
+    bool is_multi;
     size_t oldsize = buf.size();
+
+    LOG(INFO) << "buf.size=" << oldsize;
+    LOG(INFO) << "reply_size=" << reply_size();
     if (reply_size() == 0) {
-        if (!_reply.ConsumePartialIOBuf(buf, &_arena, is_auth)) {
+        if (!_first_reply.ConsumePartialIOBuf(buf, &_arena, is_auth, &is_multi)) {
             LOG(ERROR) << "mysql reply parse error";
             return false;
         }
@@ -423,56 +434,60 @@ bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_auth) {
         _cached_size_ += oldsize - newsize;
         oldsize = newsize;
         ++_nreply;
-    }
-    uint16_t status;
-    switch (_reply.type()) {
-        case RSP_OK:
-            status = _reply.status();
-        case RSP_RESULTSET:
-        case RSP_EOF:
-        default:
-            return true;
-    }
-    if (reply_count > 1) {
+    } else {
+    label_reparse:
+        if (_nreply > max_replies) {
+            LOG(ERROR) << "reply size is too big, max size is " << max_replies;
+            return false;
+        }
+        oldsize = buf.size();
         if (_other_replies == NULL) {
-            _other_replies = (MysqlReply*)_arena.allocate(sizeof(MysqlReply) * (reply_count - 1));
+            LOG(INFO) << "alloc other replies";
+            _other_replies = (MysqlReply*)_arena.allocate(sizeof(MysqlReply) * max_replies - 1);
             if (_other_replies == NULL) {
-                LOG(ERROR) << "Fail to allocate MysqlReply[" << reply_count - 1 << "]";
+                LOG(ERROR) << "Fail to allocate MysqlReply";
                 return false;
             }
-            for (int i = 0; i < reply_count - 1; ++i) {
+            for (int i = 0; i < max_replies - 1; ++i) {
                 new (&_other_replies[i]) MysqlReply;
             }
         }
-        for (int i = reply_size(); i < reply_count; ++i) {
-            if (!_other_replies[i - 1].ConsumePartialIOBuf(buf, &_arena)) {
-                return false;
-            }
-            const size_t newsize = buf.size();
-            _cached_size_ += oldsize - newsize;
-            oldsize = newsize;
-            ++_nreply;
+        LOG(INFO) << "_other_replies=" << _other_replies;
+        LOG(INFO) << "_nreply=" << _nreply;
+        if (!_other_replies[_nreply - 1].ConsumePartialIOBuf(buf, &_arena, is_auth, &is_multi)) {
+            LOG(ERROR) << "mysql reply parse error";
+            return false;
+        }
+        const size_t newsize = buf.size();
+        _cached_size_ += oldsize - newsize;
+        oldsize = newsize;
+        ++_nreply;
+
+        if (oldsize > 0) {
+            goto label_reparse;
         }
     }
-    return true;
+
+    if (!is_multi) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 std::ostream& operator<<(std::ostream& os, const MysqlResponse& response) {
-    return os << response.reply(0);
-    // if (response.reply_size() == 0) {
-    //     return os << "<empty response>";
-    // } else if (response.reply_size() == 1) {
-    //     return os << response.reply(0);
-    // } else {
-    //     os << '[';
-    //     for (int i = 0; i < response.reply_size(); ++i) {
-    //         if (i) {
-    //             os << ", ";
-    //         }
-    //         os << response.reply(i);
-    //     }
-    //     os << ']';
-    // }
+    if (response.reply_size() == 0) {
+        return os << "<empty response>";
+    } else if (response.reply_size() == 1) {
+        return os << response.reply(0);
+    } else {
+        os << "\n-----MYSQL REPLY BEGIN-----\n";
+        for (int i = 0; i < response.reply_size(); ++i) {
+            os << "\nreply(" << i << ")----------";
+            os << response.reply(i);
+        }
+        os << "\n-----MYSQL REPLY END-----\n";
+    }
     return os;
 }
 

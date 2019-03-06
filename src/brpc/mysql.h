@@ -129,7 +129,11 @@ public:
     }
 
     const MysqlReply& reply(int index) const {
-        return _reply;
+        if (index < reply_size()) {
+            return (index == 0 ? _first_reply : _other_replies[index - 1]);
+        }
+        static MysqlReply mysql_nil;
+        return mysql_nil;
     }
     // implements Message ----------------------------------------------
 
@@ -159,7 +163,7 @@ private:
     void SharedDtor();
     void SetCachedSize(int size) const;
 
-    MysqlReply _reply;
+    MysqlReply _first_reply;
     MysqlReply* _other_replies;
     butil::Arena _arena;
     int _nreply;
