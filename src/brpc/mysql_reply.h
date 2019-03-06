@@ -170,8 +170,12 @@ public:
 
     private:
         bool parseAuth(butil::IOBuf& buf, butil::Arena* arena);
+        bool is_parsed() const;
+        void set_parsed();
+
         DISALLOW_COPY_AND_ASSIGN(Auth);
         friend class MysqlReply;
+
         uint8_t _protocol;
         butil::StringPiece _version;
         uint32_t _thread_id;
@@ -183,6 +187,8 @@ public:
         uint8_t _auth_plugin_length;
         butil::StringPiece _salt2;
         // butil::IOBuf auth_plugin;
+        // if it is parsed
+        bool _is_parsed;
     };
     // Mysql Ok package
     class Ok {
@@ -195,13 +201,19 @@ public:
 
     private:
         bool parseOk(butil::IOBuf& buf, butil::Arena* arena);
+        bool is_parsed() const;
+        void set_parsed();
+
         DISALLOW_COPY_AND_ASSIGN(Ok);
         friend class MysqlReply;
+
         uint64_t _affect_row;
         uint64_t _index;
         uint16_t _status;
         uint16_t _warning;
         butil::StringPiece _msg;
+        // if it is parsed
+        bool _is_parsed;
     };
     // Mysql Error package
     class Error {
@@ -212,11 +224,17 @@ public:
 
     private:
         bool parseError(butil::IOBuf& buf, butil::Arena* arena);
+        bool is_parsed() const;
+        void set_parsed();
+
         DISALLOW_COPY_AND_ASSIGN(Error);
         friend class MysqlReply;
+
         uint16_t _errcode;
         butil::StringPiece _status;
         butil::StringPiece _msg;
+        // if it is parsed
+        bool _is_parsed;
     };
     // Mysql Eof package
     class Eof {
@@ -227,11 +245,17 @@ public:
 
     private:
         bool parseEof(butil::IOBuf& buf);
+        bool is_parsed() const;
+        void set_parsed();
         bool isEof(const butil::IOBuf& buf);
+
         DISALLOW_COPY_AND_ASSIGN(Eof);
         friend class MysqlReply;
+
         uint16_t _warning;
         uint16_t _status;
+        // if it is parsed
+        bool _is_parsed;
     };
     // Mysql Column
     class Column {
@@ -250,6 +274,9 @@ public:
 
     private:
         bool parseColumn(butil::IOBuf& buf, butil::Arena* arena);
+        bool is_parsed() const;
+        void set_parsed();
+
         DISALLOW_COPY_AND_ASSIGN(Column);
         friend class MysqlReply;
 
@@ -264,6 +291,9 @@ public:
         MysqlFieldType _type;
         MysqlFieldFlag _flag;
         uint8_t _decimal;
+
+        // if it is parsed
+        bool _is_parsed;
     };
     // Mysql Row
     class Field;
@@ -277,11 +307,17 @@ public:
                           const MysqlReply::Column* column,
                           const uint64_t column_number,
                           butil::Arena* arena);
+        bool is_parsed() const;
+        void set_parsed();
+
         DISALLOW_COPY_AND_ASSIGN(Row);
         friend class MysqlReply;
 
         const Field* _fields;
         uint64_t _field_number;
+
+        // if it is parsed
+        bool _is_parsed;
     };
     // Mysql Field
     class Field {
@@ -313,6 +349,9 @@ public:
 
     private:
         bool parseField(butil::IOBuf& buf, const MysqlReply::Column* column, butil::Arena* arena);
+        bool is_parsed() const;
+        void set_parsed();
+
         DISALLOW_COPY_AND_ASSIGN(Field);
         friend class Row;
 
@@ -332,6 +371,9 @@ public:
         MysqlFieldType _type;
         bool _is_null;
         bool _is_unsigned;
+
+        // if it is parsed
+        bool _is_parsed;
     };
 
 public:
@@ -367,11 +409,18 @@ private:
     // Mysql result set header
     struct ResultSetHeader {
         bool parseResultHeader(butil::IOBuf& buf);
+        bool is_parsed() const {
+            return _is_parsed;
+        }
+        void set_parsed() {
+            _is_parsed = true;
+        }
         uint64_t _column_number;
         uint64_t _extra_msg;
 
     private:
         DISALLOW_COPY_AND_ASSIGN(ResultSetHeader);
+        bool _is_parsed;
     };
     // Mysql result set
     struct ResultSet {
@@ -390,6 +439,7 @@ private:
     union {
         const Auth* auth;
         const ResultSet* result_set;
+        ResultSet* tmp_result_set;
         const Ok* ok;
         const Error* error;
         const Eof* eof;
@@ -495,13 +545,6 @@ inline const MysqlReply::Row* MysqlReply::row(const uint64_t index) const {
     CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
     return NULL;
 }
-inline const MysqlReply::Field* MysqlReply::Row::field(const uint64_t index) const {
-    if (index < 0 || index > _field_number) {
-        LOG(ERROR) << "wrong index, must between [0, " << _field_number << ")";
-        return NULL;
-    }
-    return _fields + index;
-}
 // mysql auth
 inline uint8_t MysqlReply::Auth::protocol() const {
     return _protocol;
@@ -533,6 +576,12 @@ inline uint8_t MysqlReply::Auth::auth_plugin_length() const {
 inline butil::StringPiece MysqlReply::Auth::salt2() const {
     return _salt2;
 }
+inline bool MysqlReply::Auth::is_parsed() const {
+    return _is_parsed;
+}
+inline void MysqlReply::Auth::set_parsed() {
+    _is_parsed = true;
+}
 // mysql reply ok
 inline uint64_t MysqlReply::Ok::affect_row() const {
     return _affect_row;
@@ -549,6 +598,12 @@ inline uint16_t MysqlReply::Ok::warning() const {
 inline butil::StringPiece MysqlReply::Ok::msg() const {
     return _msg;
 }
+inline bool MysqlReply::Ok::is_parsed() const {
+    return _is_parsed;
+}
+inline void MysqlReply::Ok::set_parsed() {
+    _is_parsed = true;
+}
 // mysql reply error
 inline uint16_t MysqlReply::Error::errcode() const {
     return _errcode;
@@ -559,12 +614,24 @@ inline butil::StringPiece MysqlReply::Error::status() const {
 inline butil::StringPiece MysqlReply::Error::msg() const {
     return _msg;
 }
+inline bool MysqlReply::Error::is_parsed() const {
+    return _is_parsed;
+}
+inline void MysqlReply::Error::set_parsed() {
+    _is_parsed = true;
+}
 // mysql reply eof
 inline uint16_t MysqlReply::Eof::warning() const {
     return _warning;
 }
 inline uint16_t MysqlReply::Eof::status() const {
     return _status;
+}
+inline bool MysqlReply::Eof::is_parsed() const {
+    return _is_parsed;
+}
+inline void MysqlReply::Eof::set_parsed() {
+    _is_parsed = true;
 }
 // mysql reply column
 inline butil::StringPiece MysqlReply::Column::catalog() const {
@@ -599,6 +666,26 @@ inline MysqlFieldFlag MysqlReply::Column::flag() const {
 }
 inline uint8_t MysqlReply::Column::decimal() const {
     return _decimal;
+}
+inline bool MysqlReply::Column::is_parsed() const {
+    return _is_parsed;
+}
+inline void MysqlReply::Column::set_parsed() {
+    _is_parsed = true;
+}
+// mysql reply row
+inline const MysqlReply::Field* MysqlReply::Row::field(const uint64_t index) const {
+    if (index < 0 || index > _field_number) {
+        LOG(ERROR) << "wrong index, must between [0, " << _field_number << ")";
+        return NULL;
+    }
+    return _fields + index;
+}
+inline bool MysqlReply::Row::is_parsed() const {
+    return _is_parsed;
+}
+inline void MysqlReply::Row::set_parsed() {
+    _is_parsed = true;
 }
 // mysql reply field
 inline int8_t MysqlReply::Field::stiny() const {
@@ -720,6 +807,12 @@ inline bool MysqlReply::Field::is_string() const {
 }
 inline bool MysqlReply::Field::is_null() const {
     return _is_null;
+}
+inline bool MysqlReply::Field::is_parsed() const {
+    return _is_parsed;
+}
+inline void MysqlReply::Field::set_parsed() {
+    _is_parsed = true;
 }
 // little endian order to host order
 inline uint16_t mysql_uint2korr(const uint8_t* A) {
