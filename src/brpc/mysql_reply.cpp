@@ -584,9 +584,9 @@ bool MysqlReply::Ok::parseOk(butil::IOBuf& buf, butil::Arena* arena) {
         len = header.payload_size - (old_size - new_size);
         char* msg = NULL;
         MY_ALLOC_CHECK(my_alloc_check(arena, len, msg));
-        buf.cutn(msg, len - 1);
-        _msg.set(msg, len - 1);
-        buf.pop_front(1);  // Null
+        buf.cutn(msg, len);
+        _msg.set(msg, len);
+        // buf.pop_front(1);  // Null
     }
     set_parsed();
     return true;
@@ -642,10 +642,10 @@ bool MysqlReply::Error::parseError(butil::IOBuf& buf, butil::Arena* arena) {
     // error message, Null-Terminated string
     uint64_t len = header.payload_size - 9;
     char* msg = NULL;
-    MY_ALLOC_CHECK(my_alloc_check(arena, len - 1, msg));
-    buf.cutn(msg, len - 1);
-    _msg.set(msg, len - 1);
-    buf.pop_front(1);  // Null
+    MY_ALLOC_CHECK(my_alloc_check(arena, len, msg));
+    buf.cutn(msg, len);
+    _msg.set(msg, len);
+    // buf.pop_front(1);  // Null
     set_parsed();
     return true;
 }
