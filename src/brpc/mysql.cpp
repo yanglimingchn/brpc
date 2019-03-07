@@ -472,22 +472,19 @@ label_reparse:
 }
 
 std::ostream& operator<<(std::ostream& os, const MysqlResponse& response) {
-          os << "\n-----MYSQL REPLY BEGIN-----\n";
-
+    os << "\n-----MYSQL REPLY BEGIN-----\n";
     if (response.reply_size() == 0) {
-        return os << "<empty response>";
-                    os << "\n-----MYSQL REPLY END-----\n";
+        os << "<empty response>";
     } else if (response.reply_size() == 1) {
-        return os << response.reply(0);
-                    os << "\n-----MYSQL REPLY END-----\n";
+        os << response.reply(0);
     } else {
         for (int i = 0; i < response.reply_size(); ++i) {
-            os << "\nreply(" << i << ")----------";
+          os << "\nreply(" << i << ")----------";
             os << response.reply(i);
         }
-        os << "\n-----MYSQL REPLY END-----\n";
 
     }
+    os << "\n-----MYSQL REPLY END-----\n";
 
     return os;
 }
