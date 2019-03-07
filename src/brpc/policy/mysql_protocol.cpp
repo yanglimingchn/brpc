@@ -80,35 +80,54 @@ ParseResult ParseMysqlMessage(butil::IOBuf* source,
             socket->GivebackPipelinedInfo(pi);
             return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
         }
-
+        LOG(INFO) << "pi with auth:" << pi.with_auth;
         if (pi.with_auth) {
-            if (FLAGS_mysql_verbose) {
-                LOG(INFO) << "\n[MYSQL RESPONSE] " << msg->response;
+          if (FLAGS_mysql_verbose) {
+            LOG(INFO) << "\n[MYSQL RESPONSE] " << msg->response;
+          }
+          MysqlAuthenticator* auth = global_mysql_authenticator();
+          const MysqlReply &reply = msg->response.reply(0);
+          if (reply.is_auth()) {
+            auth->SaveAuth(reply.auth());
+            std::string auth_data;
+            if (auth->GenerateCredential(&auth_data) != 0) {
+              LOG(INFO) << "[MYSQL PARSE] authentication step one";
+              return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
             }
-            MysqlAuthenticator* auth = global_mysql_authenticator();
-            if (auth->CurrStep() == MYSQL_AUTH_STEP_ONE) {  // receive auth & send auth
-                auth->SaveAuth(msg->response.reply(0).auth());
-                std::string auth_data;
-                if (auth->GenerateCredential(&auth_data) != 0) {
-                    LOG(INFO) << "[MYSQL PARSE] authentication step one";
-                    return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
-                }
-                butil::IOBuf auth_resp;
-                auth_resp.append(auth_data);
-                auth_resp.cut_into_file_descriptor(socket->fd());
-                auth->NextStep();
-            } else if (auth->CurrStep() == MYSQL_AUTH_STEP_TWO) {  // check auth & send request
-                butil::IOBuf& raw_req = auth->raw_req();
-                raw_req.cut_into_file_descriptor(socket->fd());
-                pi.with_auth = false;
-            } else {
-                LOG(ERROR) << "[MYSQL PARSE] wrong authentication step";
-                return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
-            }
-            DestroyingPtr<InputResponse> auth_msg =
-                static_cast<InputResponse*>(socket->release_parsing_context());
-            socket->GivebackPipelinedInfo(pi);
-            return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
+            butil::IOBuf auth_resp;
+            auth_resp.append(auth_data);
+            auth_resp.cut_into_file_descriptor(socket->fd());
+          } else if (reply.is_ok()) {
+            butil::IOBuf& raw_req = auth->raw_req();
+            raw_req.cut_into_file_descriptor(socket->fd());
+            pi.with_auth = false;
+          } else {
+            LOG(ERROR) << "[MYSQL PARSE] wrong authentication step";
+            return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+          }
+          // if (auth->CurrStep() == MYSQL_AUTH_STEP_ONE) {  // receive auth & send auth
+          //     auth->SaveAuth(msg->response.reply(0).auth());
+          //     std::string auth_data;
+          //     if (auth->GenerateCredential(&auth_data) != 0) {
+          //         LOG(INFO) << "[MYSQL PARSE] authentication step one";
+          //         return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+          //     }
+          //     butil::IOBuf auth_resp;
+          //     auth_resp.append(auth_data);
+          //     auth_resp.cut_into_file_descriptor(socket->fd());
+          //     auth->NextStep();
+          // } else if (auth->CurrStep() == MYSQL_AUTH_STEP_TWO) {  // check auth & send request
+          //     butil::IOBuf& raw_req = auth->raw_req();
+          //     raw_req.cut_into_file_descriptor(socket->fd());
+          //     pi.with_auth = false;
+          // } else {
+          //     LOG(ERROR) << "[MYSQL PARSE] wrong authentication step";
+          //     return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+          // }
+          DestroyingPtr<InputResponse> auth_msg =
+              static_cast<InputResponse*>(socket->release_parsing_context());
+          socket->GivebackPipelinedInfo(pi);
+          return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
         }
 
         msg->id_wait = pi.id_wait;
@@ -186,6 +205,7 @@ void PackMysqlRequest(butil::IOBuf* buf,
                       Controller* cntl,
                       const butil::IOBuf& request,
                       const Authenticator* auth) {
+  LOG(INFO) << "auth=" << auth;
     if (auth) {
         const MysqlAuthenticator* my_auth(dynamic_cast<const MysqlAuthenticator*>(auth));
         if (my_auth == NULL) {
