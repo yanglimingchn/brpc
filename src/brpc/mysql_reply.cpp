@@ -144,7 +144,7 @@ bool ParseHeader(butil::IOBuf& buf, MysqlHeader* value) {
 bool ParseEncodeLength(butil::IOBuf& buf, uint64_t* value) {
     uint8_t f;
     buf.cut1((char*)&f);
-    if (f >= 0 && f <= 250) {
+    if (f <= 250) {
         *value = f;
     } else if (f == 251) {
         *value = 0;

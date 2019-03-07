@@ -522,7 +522,7 @@ inline uint64_t MysqlReply::column_number() const {
 }
 inline const MysqlReply::Column* MysqlReply::column(const uint64_t index) const {
     if (is_resultset()) {
-        if (index < 0 || index > _data.result_set.const_var->_header._column_number) {
+        if (index > _data.result_set.const_var->_header._column_number) {
             LOG(ERROR) << "wrong index, must between [0, "
                        << _data.result_set.const_var->_header._column_number << ")";
             return NULL;
@@ -684,7 +684,7 @@ inline uint64_t MysqlReply::Row::field_number() const {
     return _field_number;
 }
 inline const MysqlReply::Field* MysqlReply::Row::field(const uint64_t index) const {
-    if (index < 0 || index > _field_number) {
+    if (index > _field_number) {
         LOG(ERROR) << "wrong index, must between [0, " << _field_number << ")";
         return NULL;
     }

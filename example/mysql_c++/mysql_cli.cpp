@@ -57,27 +57,28 @@ static bool access_mysql(brpc::Channel& channel, const char* command) {
             LOG(ERROR) << "Fail to access mysql, " << cntl.ErrorText();
             return false;
         } else {
-            for (int i = 0; i < response.reply_size(); ++i) {
-                const brpc::MysqlReply& reply = response.reply(i);
-                // for (uint64_t j = 0; j < reply.column_number(); ++j) {
-                //     const brpc::MysqlReply::Column* column = reply.column(j);
-                //     std::cout << column->catalog() << std::endl;
-                //     std::cout << column->charset() << std::endl;
-                // }
-                // std::cout << "row_number=" << reply.row_number() << std::endl;
-                // const brpc::MysqlReply::Row* row;
-                // while ((row = reply.next()) != NULL) {
-                //     for (uint64_t k = 0; k < row->field_number(); ++k) {
-                //         std::cout << "field(" << k << "): " << row->field(k)->string() << "\t";
-                //     }
-                //     std::cout << std::endl;
-                // }
-                std::cout << reply << std::endl;
-            }
-            // std::cout << response << std::endl;
+            // for (int i = 0; i < response.reply_size(); ++i) {
+            //     const brpc::MysqlReply& reply = response.reply(i);
+            //     for (uint64_t j = 0; j < reply.column_number(); ++j) {
+            //         const brpc::MysqlReply::Column* column = reply.column(j);
+            //         std::cout << column->catalog() << std::endl;
+            //         std::cout << column->charset() << std::endl;
+            //     }
+            //     std::cout << "row_number=" << reply.row_number() << std::endl;
+            //     const brpc::MysqlReply::Row* row;
+            //     while ((row = reply.next()) != NULL) {
+            //         for (uint64_t k = 0; k < row->field_number(); ++k) {
+            //             std::cout << "field(" << k << "): " << row->field(k)->string() << "\t";
+            //         }
+            //         std::cout << std::endl;
+            //     }
+            //     // std::cout << reply << std::endl;
+            // }
+            std::cout << response << std::endl;
             return true;
         }
     }
+    return true;
 }
 
 // For freeing the memory returned by readline().
