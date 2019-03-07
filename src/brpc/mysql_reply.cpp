@@ -3,12 +3,12 @@
 
 namespace brpc {
 
-#define MY_ERROR_RET(expr, message)                                                       \
-    do {                                                                                  \
-        if ((expr) == true) {                                                             \
-            LOG(FATAL) << message " in file:" << __LINE__ << "function:" << __FUNCTION__; \
-            return false;                                                                 \
-        }                                                                                 \
+#define MY_ERROR_RET(expr, message) \
+    do {                            \
+        if ((expr) == true) {       \
+            LOG(FATAL) << message;  \
+            return false;           \
+        }                           \
     } while (0)
 
 #define MY_ALLOC_CHECK(expr) MY_ERROR_RET(!(expr), "Fail to arena allocate")
@@ -16,7 +16,7 @@ namespace brpc {
 template <class Type>
 inline bool my_alloc_check(butil::Arena* arena, const size_t n, Type*& pointer) {
     if (pointer == NULL) {
-        pointer = arena->allocate(sizeof(Type) * n);
+        pointer = (Type*)arena->allocate(sizeof(Type) * n);
         if (pointer == NULL) {
             return false;
         }
@@ -119,10 +119,13 @@ bool ParseHeader(butil::IOBuf& buf, MysqlHeader* value) {
     uint8_t header[4];
     const uint8_t* p = (const uint8_t*)buf.fetch(header, sizeof(header));
     if (p == NULL) {
+        LOG(ERROR) << "fetch mysql protocol header failed";
         return false;
     }
     uint32_t payload_size = mysql_uint3korr(p);
     if (buf.size() < payload_size + 4) {
+        LOG(ERROR) << "IOBuf not enough full mysql message buf size:" << buf.size()
+                   << " message size:" << payload_size + 4;
         return false;
     }
 
@@ -166,7 +169,6 @@ bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf,
                                      const bool is_auth,
                                      bool* is_multi) {
     *is_multi = false;
-    LOG(INFO) << "reply consume buf";
     uint8_t header[5];
     const uint8_t* p = (const uint8_t*)buf.fetch(header, sizeof(header));
     if (p == NULL) {
@@ -203,45 +205,60 @@ bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf,
         *is_multi = _data.eof->status() & SERVER_MORE_RESULTS_EXISTS;
     } else if (type >= 0x01 && type <= 0xFA) {
         _type = RSP_RESULTSET;
-        if (_data.tmp_result_set == NULL) {
-            MY_ALLOC_CHECK(my_alloc_check(arena, 1, _data.tmp_result_set));
-        }
-        ResultSet& r = *_data.tmp_result_set;
+        MY_ALLOC_CHECK(my_alloc_check(arena, 1, _data.result_set.var));
+        ResultSet& r = *_data.result_set.var;
         // parse header
         MY_PARSE_CHECK(r._header.parseResultHeader(buf));
         // parse colunms
-        if (r._columns == NULL) {
-            MY_ALLOC_CHECK(my_alloc_check(arena, 1, r._columns));
-        }
+        MY_ALLOC_CHECK(my_alloc_check(arena, r._header._column_number, r._columns));
         for (uint64_t i = 0; i < r._header._column_number; ++i) {
-            MY_PARSE_CHECK(columns[i].parseColumn(buf, arena));
+            MY_PARSE_CHECK(r._columns[i].parseColumn(buf, arena));
         }
         // parse eof1
         MY_PARSE_CHECK(r._eof1.parseEof(buf));
         // parse row
         Eof eof;
         std::vector<Row*> rows;
+        bool is_first = true;
         while (!eof.isEof(buf)) {
-            Row* row = (Row*)alloc_and_init(arena, sizeof(Row));
-            MY_ALLOC_CHECK(row);
-            Field* fields = (Field*)alloc_and_init(arena, sizeof(Field) * r._header._column_number);
-            MY_ALLOC_CHECK(fields);
-            MY_PARSE_CHECK(
-                row->parseTextRow(buf, fields, columns, r._header._column_number, arena));
+            if (is_first) {
+                // we may call ConsumePartialIOBuf many times, reparse last reply
+                if (r._last != NULL) {
+                    MY_PARSE_CHECK(r._last->parseTextRow(buf));
+                    for (uint64_t i = 0; i < r._header._column_number; ++i) {
+                        MY_PARSE_CHECK(r._last->_fields[i].parseField(buf, r._columns + i, arena));
+                    }
+                }
+                is_first = false;
+                continue;
+            }
+
+            Row* row = NULL;
+            Field* fields = NULL;
+            MY_ALLOC_CHECK(my_alloc_check(arena, 1, row));
+            MY_ALLOC_CHECK(my_alloc_check(arena, r._header._column_number, fields));
             row->_fields = fields;
             row->_field_number = r._header._column_number;
-            rows.push_back(row);
+            // add row to list begin
+            if (r._first == NULL) {
+                r._first = row;
+            }
+            if (r._last != NULL) {
+                r._last->_next = row;
+                r._last = row;
+            } else {
+                r._last = row;
+            }
+            // add row to list end
+            MY_PARSE_CHECK(row->parseTextRow(buf));
+            for (uint64_t i = 0; i < r._header._column_number; ++i) {
+                MY_PARSE_CHECK(fields[i].parseField(buf, r._columns + i, arena));
+            }
+            // row number
+            ++r._row_number;
         }
-        Row** rpp = (Row**)alloc_and_init(arena, sizeof(Row*) * rows.size());
-        MY_ALLOC_CHECK(rpp);
-        for (size_t i = 0; i < rows.size(); ++i) {
-            *(rpp + i) = rows[i];
-        }
-        r._rows = rpp;
-        r._row_number = rows.size();
         // parse eof2
         MY_PARSE_CHECK(r._eof2.parseEof(buf));
-        _data.result_set = result_set;
         *is_multi = r._eof2.status() & SERVER_MORE_RESULTS_EXISTS;
     } else {
         LOG(ERROR) << "Unknown Response Type";
@@ -269,7 +286,7 @@ void MysqlReply::Print(std::ostream& os) const {
         os << "\nerrcode:" << err._errcode << "\nstatus:" << err._status.as_string()
            << "\nmessage:" << err._msg.as_string();
     } else if (_type == RSP_RESULTSET) {
-        const ResultSet& r = *_data.result_set;
+        const ResultSet& r = *_data.result_set.const_var;
         os << "\nheader.column_number:" << r._header._column_number;
         for (uint64_t i = 0; i < r._header._column_number; ++i) {
             os << "\ncolumn[" << i << "].catalog:" << r._columns[i]._catalog.as_string()
@@ -286,45 +303,46 @@ void MysqlReply::Print(std::ostream& os) const {
         }
         os << "\neof1.warning:" << r._eof1._warning;
         os << "\neof1.status:" << r._eof1._status;
-        for (uint64_t i = 0; i < r._row_number; ++i) {
+        int n = 0;
+        for (const Row* row = r._first; row != NULL; row = row->_next) {
+            os << "\nrow(" << ++n << "):";
             for (uint64_t j = 0; j < r._header._column_number; ++j) {
-                os << "\nrow[" << i << "][" << j << "]:";
                 switch (r._columns[j]._type) {
                     case FIELD_TYPE_TINY:
                         if (r._columns[j]._flag & UNSIGNED_FLAG) {
-                            os << r._rows[i]->field(j)->tiny();
+                            os << row->field(j)->tiny();
                         } else {
-                            os << r._rows[i]->field(j)->stiny();
+                            os << row->field(j)->stiny();
                         }
                         break;
                     case FIELD_TYPE_SHORT:
                     case FIELD_TYPE_YEAR:
                         if (r._columns[j]._flag & UNSIGNED_FLAG) {
-                            os << r._rows[i]->field(j)->small();
+                            os << row->field(j)->small();
                         } else {
-                            os << r._rows[i]->field(j)->ssmall();
+                            os << row->field(j)->ssmall();
                         }
                         break;
                     case FIELD_TYPE_INT24:
                     case FIELD_TYPE_LONG:
                         if (r._columns[j]._flag & UNSIGNED_FLAG) {
-                            os << r._rows[i]->field(j)->integer();
+                            os << row->field(j)->integer();
                         } else {
-                            os << r._rows[i]->field(j)->sinteger();
+                            os << row->field(j)->sinteger();
                         }
                         break;
                     case FIELD_TYPE_LONGLONG:
                         if (r._columns[j]._flag & UNSIGNED_FLAG) {
-                            os << r._rows[i]->field(j)->bigint();
+                            os << row->field(j)->bigint();
                         } else {
-                            os << r._rows[i]->field(j)->sbigint();
+                            os << row->field(j)->sbigint();
                         }
                         break;
                     case FIELD_TYPE_FLOAT:
-                        os << r._rows[i]->field(j)->float32();
+                        os << row->field(j)->float32();
                         break;
                     case FIELD_TYPE_DOUBLE:
-                        os << r._rows[i]->field(j)->float64();
+                        os << row->field(j)->float64();
                         break;
                     case FIELD_TYPE_DECIMAL:
                     case FIELD_TYPE_NEWDECIMAL:
@@ -345,11 +363,12 @@ void MysqlReply::Print(std::ostream& os) const {
                     case FIELD_TYPE_NEWDATE:
                     case FIELD_TYPE_TIMESTAMP:
                     case FIELD_TYPE_DATETIME:
-                        os << r._rows[i]->field(j)->string();
+                        os << row->field(j)->string();
                         break;
                     default:
                         os << "Unknown field type";
                 }
+                os << "\t";
             }
         }
         os << "\neof2.warning:" << r._eof2._warning;
@@ -400,8 +419,8 @@ bool MysqlReply::Auth::parseAuth(butil::IOBuf& buf, butil::Arena* arena) {
     {
         butil::IOBuf version;
         buf.cut_until(&version, mysql_null_terminator);
-        char* d = (char*)alloc_and_init(arena, version.size());
-        MY_ALLOC_CHECK(d);
+        char* d = NULL;
+        MY_ALLOC_CHECK(my_alloc_check(arena, version.size(), d));
         version.copy_to(d);
         _version.set(d, version.size());
     }
@@ -413,8 +432,8 @@ bool MysqlReply::Auth::parseAuth(butil::IOBuf& buf, butil::Arena* arena) {
     {
         butil::IOBuf salt;
         buf.cut_until(&salt, mysql_null_terminator);
-        char* d = (char*)alloc_and_init(arena, salt.size());
-        MY_ALLOC_CHECK(d);
+        char* d = NULL;
+        MY_ALLOC_CHECK(my_alloc_check(arena, salt.size(), d));
         salt.copy_to(d);
         _salt.set(d, salt.size());
     }
@@ -439,8 +458,8 @@ bool MysqlReply::Auth::parseAuth(butil::IOBuf& buf, butil::Arena* arena) {
     {
         butil::IOBuf salt2;
         buf.cut_until(&salt2, mysql_null_terminator);
-        char* d = (char*)alloc_and_init(arena, salt2.size());
-        MY_ALLOC_CHECK(d);
+        char* d = NULL;
+        MY_ALLOC_CHECK(my_alloc_check(arena, salt2.size(), d));
         salt2.copy_to(d);
         _salt2.set(d, salt2.size());
     }
@@ -454,10 +473,10 @@ bool MysqlReply::ResultSetHeader::parseResultHeader(butil::IOBuf& buf) {
         return true;
     }
     MysqlHeader header;
-    uint64_t old_size, new_size;
     if (!ParseHeader(buf, &header)) {
         return false;
     }
+    uint64_t old_size, new_size;
     old_size = buf.size();
     ParseEncodeLength(buf, &_column_number);
     new_size = buf.size();
@@ -481,38 +500,38 @@ bool MysqlReply::Column::parseColumn(butil::IOBuf& buf, butil::Arena* arena) {
 
     uint64_t len;
     ParseEncodeLength(buf, &len);
-    char* catalog = (char*)alloc_and_init(arena, sizeof(char) * len);
-    MY_ALLOC_CHECK(catalog);
+    char* catalog = NULL;
+    MY_ALLOC_CHECK(my_alloc_check(arena, len, catalog));
     buf.cutn(catalog, len);
     _catalog.set(catalog, len);
 
     ParseEncodeLength(buf, &len);
-    char* database = (char*)alloc_and_init(arena, sizeof(char) * len);
-    MY_ALLOC_CHECK(database);
+    char* database = NULL;
+    MY_ALLOC_CHECK(my_alloc_check(arena, len, database));
     buf.cutn(database, len);
     _database.set(database, len);
 
     ParseEncodeLength(buf, &len);
-    char* table = (char*)alloc_and_init(arena, sizeof(char) * len);
-    MY_ALLOC_CHECK(table);
+    char* table = NULL;
+    MY_ALLOC_CHECK(my_alloc_check(arena, len, table));
     buf.cutn(table, len);
     _table.set(table, len);
 
     ParseEncodeLength(buf, &len);
-    char* origin_table = (char*)alloc_and_init(arena, sizeof(char) * len);
-    MY_ALLOC_CHECK(origin_table);
+    char* origin_table = NULL;
+    MY_ALLOC_CHECK(my_alloc_check(arena, len, origin_table));
     buf.cutn(origin_table, len);
     _origin_table.set(origin_table, len);
 
     ParseEncodeLength(buf, &len);
-    char* name = (char*)alloc_and_init(arena, sizeof(char) * len);
-    MY_ALLOC_CHECK(name);
+    char* name = NULL;
+    MY_ALLOC_CHECK(my_alloc_check(arena, len, name));
     buf.cutn(name, len);
     _name.set(name, len);
 
     ParseEncodeLength(buf, &len);
-    char* origin_name = (char*)alloc_and_init(arena, sizeof(char) * len);
-    MY_ALLOC_CHECK(origin_name);
+    char* origin_name = NULL;
+    MY_ALLOC_CHECK(my_alloc_check(arena, len, origin_name));
     buf.cutn(origin_name, len);
     _origin_name.set(origin_name, len);
     buf.pop_front(1);
@@ -546,10 +565,11 @@ bool MysqlReply::Ok::parseOk(butil::IOBuf& buf, butil::Arena* arena) {
     if (!ParseHeader(buf, &header)) {
         return false;
     }
-    buf.pop_front(1);
-    uint64_t len, old_size, new_size;
 
+    uint64_t len, old_size, new_size;
     old_size = buf.size();
+    buf.pop_front(1);
+
     ParseEncodeLength(buf, &len);
     _affect_row = len;
 
@@ -562,8 +582,8 @@ bool MysqlReply::Ok::parseOk(butil::IOBuf& buf, butil::Arena* arena) {
     new_size = buf.size();
     if (old_size - new_size < header.payload_size) {
         len = header.payload_size - (old_size - new_size);
-        char* msg = (char*)alloc_and_init(arena, sizeof(char) * len - 1);
-        MY_ALLOC_CHECK(msg);
+        char* msg = NULL;
+        MY_ALLOC_CHECK(my_alloc_check(arena, len, msg));
         buf.cutn(msg, len - 1);
         _msg.set(msg, len - 1);
         buf.pop_front(1);  // Null
@@ -615,14 +635,14 @@ bool MysqlReply::Error::parseError(butil::IOBuf& buf, butil::Arena* arena) {
     }
     buf.pop_front(1);  // '#'
     // 5 byte server status
-    char* status = (char*)alloc_and_init(arena, sizeof(char) * 5);
-    MY_ALLOC_CHECK(status);
+    char* status = NULL;
+    MY_ALLOC_CHECK(my_alloc_check(arena, 5, status));
     buf.cutn(status, 5);
     _status.set(status, 5);
     // error message, Null-Terminated string
-    uint64_t len = header.payload_size - 8;
-    char* msg = (char*)alloc_and_init(arena, sizeof(char) * len - 1);
-    MY_ALLOC_CHECK(msg);
+    uint64_t len = header.payload_size - 9;
+    char* msg = NULL;
+    MY_ALLOC_CHECK(my_alloc_check(arena, len - 1, msg));
     buf.cutn(msg, len - 1);
     _msg.set(msg, len - 1);
     buf.pop_front(1);  // Null
@@ -630,24 +650,13 @@ bool MysqlReply::Error::parseError(butil::IOBuf& buf, butil::Arena* arena) {
     return true;
 }
 
-bool MysqlReply::Row::parseTextRow(butil::IOBuf& buf,
-                                   MysqlReply::Field* value,
-                                   const MysqlReply::Column* column,
-                                   const uint64_t column_number,
-                                   butil::Arena* arena) {
+bool MysqlReply::Row::parseTextRow(butil::IOBuf& buf) {
     if (is_parsed()) {
         return true;
     }
     MysqlHeader header;
     if (!ParseHeader(buf, &header)) {
         return false;
-    }
-
-    for (uint64_t i = 0; i < column_number; ++i) {
-        if (value[i].parseField(buf, column + i, arena) == false) {
-            LOG(ERROR) << "parse field error";
-            return false;
-        }
     }
     set_parsed();
     return true;
@@ -729,8 +738,8 @@ bool MysqlReply::Field::parseField(butil::IOBuf& buf,
         case FIELD_TYPE_NEWDATE:
         case FIELD_TYPE_TIMESTAMP:
         case FIELD_TYPE_DATETIME: {
-            char* d = (char*)alloc_and_init(arena, sizeof(char) * len);
-            MY_ALLOC_CHECK(d);
+            char* d = NULL;
+            MY_ALLOC_CHECK(my_alloc_check(arena, len, d));
             str.copy_to(d);
             _data.str.set(d, len);
         } break;

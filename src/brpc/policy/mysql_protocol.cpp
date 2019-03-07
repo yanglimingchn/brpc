@@ -70,16 +70,13 @@ ParseResult ParseMysqlMessage(butil::IOBuf* source,
     }
 
     do {
-        LOG(INFO) << "got msg";
         InputResponse* msg = static_cast<InputResponse*>(socket->parsing_context());
         if (msg == NULL) {
-            LOG(INFO) << "msg is null";
             msg = new InputResponse;
             socket->reset_parsing_context(msg);
         }
 
         if (msg->response.ConsumePartialIOBuf(*source, pi.with_auth) == false) {
-            LOG(INFO) << "consume return false";
             socket->GivebackPipelinedInfo(pi);
             return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
         }

@@ -32,6 +32,7 @@
 
 namespace brpc {
 
+DEFINE_int32(mysql_max_replies, 10, "maximum replies size in one MysqlResponse");
 DEFINE_bool(mysql_verbose_crlf2space, false, "[DEBUG] Show \\r\\n as a space");
 
 // Internal implementation detail -- do not call these.
@@ -419,53 +420,48 @@ void MysqlResponse::Swap(MysqlResponse* other) {
 // ===================================================================
 
 bool MysqlResponse::ConsumePartialIOBuf(butil::IOBuf& buf, const bool is_auth) {
-    const int max_replies = 10;
     bool is_multi;
-    size_t oldsize = buf.size();
 
-    LOG(INFO) << "buf.size=" << oldsize;
-    LOG(INFO) << "reply_size=" << reply_size();
+label_reparse:
+    size_t oldsize = buf.size();
     if (reply_size() == 0) {
         if (!_first_reply.ConsumePartialIOBuf(buf, &_arena, is_auth, &is_multi)) {
             LOG(ERROR) << "mysql reply parse error";
             return false;
         }
+
         const size_t newsize = buf.size();
         _cached_size_ += oldsize - newsize;
         oldsize = newsize;
         ++_nreply;
     } else {
-    label_reparse:
-        if (_nreply > max_replies) {
-            LOG(ERROR) << "reply size is too big, max size is " << max_replies;
+        if (_nreply >= FLAGS_mysql_max_replies) {
+            LOG(ERROR) << "current max reply size is " << FLAGS_mysql_max_replies
+                       << ", use --mysql_max_replies=XXX to adjust";
             return false;
         }
-        oldsize = buf.size();
         if (_other_replies == NULL) {
-            LOG(INFO) << "alloc other replies";
-            _other_replies = (MysqlReply*)_arena.allocate(sizeof(MysqlReply) * max_replies - 1);
+            _other_replies =
+                (MysqlReply*)_arena.allocate(sizeof(MysqlReply) * FLAGS_mysql_max_replies - 1);
             if (_other_replies == NULL) {
                 LOG(ERROR) << "Fail to allocate MysqlReply";
                 return false;
             }
-            for (int i = 0; i < max_replies - 1; ++i) {
-                new (&_other_replies[i]) MysqlReply;
-            }
         }
-        LOG(INFO) << "_other_replies=" << _other_replies;
-        LOG(INFO) << "_nreply=" << _nreply;
+        new (&_other_replies[_nreply - 1]) MysqlReply;
         if (!_other_replies[_nreply - 1].ConsumePartialIOBuf(buf, &_arena, is_auth, &is_multi)) {
             LOG(ERROR) << "mysql reply parse error";
             return false;
         }
+
         const size_t newsize = buf.size();
         _cached_size_ += oldsize - newsize;
         oldsize = newsize;
         ++_nreply;
+    }
 
-        if (oldsize > 0) {
-            goto label_reparse;
-        }
+    if (oldsize > 0) {
+        goto label_reparse;
     }
 
     if (!is_multi) {

@@ -299,23 +299,20 @@ public:
     class Field;
     class Row {
     public:
+        uint64_t field_number() const;
         const Field* field(const uint64_t index) const;
 
     private:
-        bool parseTextRow(butil::IOBuf& buf,
-                          MysqlReply::Field* value,
-                          const MysqlReply::Column* column,
-                          const uint64_t column_number,
-                          butil::Arena* arena);
+        bool parseTextRow(butil::IOBuf& buf);
         bool is_parsed() const;
         void set_parsed();
 
         DISALLOW_COPY_AND_ASSIGN(Row);
         friend class MysqlReply;
 
-        const Field* _fields;
+        Field* _fields;
         uint64_t _field_number;
-
+        Row* _next;
         // if it is parsed
         bool _is_parsed;
     };
@@ -353,7 +350,8 @@ public:
         void set_parsed();
 
         DISALLOW_COPY_AND_ASSIGN(Field);
-        friend class Row;
+        friend class MysqlReply;
+        // friend class Row;
 
         union {
             int8_t stiny;
@@ -403,7 +401,7 @@ public:
     // get row number
     uint64_t row_number() const;
     // get one row
-    const Row* row(const uint64_t index) const;
+    const Row* next() const;
 
 private:
     // Mysql result set header
@@ -425,9 +423,13 @@ private:
     // Mysql result set
     struct ResultSet {
         ResultSetHeader _header;
-        const Column* _columns;
+        Column* _columns;
         Eof _eof1;
-        const Row* const* _rows;
+        // row list
+        Row* _first;
+        Row* _last;
+        Row* _cur;
+        // row list end
         uint64_t _row_number;
         Eof _eof2;
 
@@ -438,8 +440,11 @@ private:
     MysqlRspType _type;
     union {
         const Auth* auth;
-        const ResultSet* result_set;
-        ResultSet* tmp_result_set;
+        union {
+            const ResultSet* const_var;
+            // build full result set, we may call ConsumePartialIOBuf many times
+            ResultSet* var;
+        } result_set;
         const Ok* ok;
         const Error* error;
         const Eof* eof;
@@ -510,37 +515,38 @@ inline bool MysqlReply::is_resultset() const {
 }
 inline uint64_t MysqlReply::column_number() const {
     if (is_resultset()) {
-        return _data.result_set->_header._column_number;
+        return _data.result_set.const_var->_header._column_number;
     }
     CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
     return 0;
 }
 inline const MysqlReply::Column* MysqlReply::column(const uint64_t index) const {
     if (is_resultset()) {
-        if (index < 0 || index > _data.result_set->_header._column_number) {
+        if (index < 0 || index > _data.result_set.const_var->_header._column_number) {
             LOG(ERROR) << "wrong index, must between [0, "
-                       << _data.result_set->_header._column_number << ")";
+                       << _data.result_set.const_var->_header._column_number << ")";
             return NULL;
         }
-        return _data.result_set->_columns + index;
+        return _data.result_set.const_var->_columns + index;
     }
     CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
     return NULL;
 }
 inline uint64_t MysqlReply::row_number() const {
     if (is_resultset()) {
-        return _data.result_set->_row_number;
+        return _data.result_set.const_var->_row_number;
     }
     CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
     return 0;
 }
-inline const MysqlReply::Row* MysqlReply::row(const uint64_t index) const {
+inline const MysqlReply::Row* MysqlReply::next() const {
     if (is_resultset()) {
-        if (index < 0 || index > _data.result_set->_row_number) {
-            LOG(ERROR) << "wrong index, must between [0, " << _data.result_set->_row_number << ")";
-            return NULL;
+        if (_data.result_set.var->_cur == NULL) {
+            _data.result_set.var->_cur = _data.result_set.var->_first;
+        } else {
+            _data.result_set.var->_cur = _data.result_set.var->_cur->_next;
         }
-        return *_data.result_set->_rows + index;
+        return _data.result_set.var->_cur;
     }
     CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
     return NULL;
@@ -674,6 +680,9 @@ inline void MysqlReply::Column::set_parsed() {
     _is_parsed = true;
 }
 // mysql reply row
+inline uint64_t MysqlReply::Row::field_number() const {
+    return _field_number;
+}
 inline const MysqlReply::Field* MysqlReply::Row::field(const uint64_t index) const {
     if (index < 0 || index > _field_number) {
         LOG(ERROR) << "wrong index, must between [0, " << _field_number << ")";
