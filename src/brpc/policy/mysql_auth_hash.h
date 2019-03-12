@@ -38,9 +38,7 @@ namespace brpc {
 namespace policy {
 
 std::string mysql_build_mysql41_authentication_response(const std::string& salt_data,
-                                                        const std::string& user,
-                                                        const std::string& password,
-                                                        const std::string& schema);
+                                                        const std::string& password);
 
 std::string mysql_build_sha256_authentication_response(const std::string& salt_data,
                                                        const std::string& user,

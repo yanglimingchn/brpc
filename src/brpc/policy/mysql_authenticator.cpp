@@ -21,24 +21,37 @@
 #include "butil/iobuf.h"
 #include "butil/logging.h"  // LOG()
 #include "butil/sys_byteorder.h"
-// #include "butil/memory/singleton_on_pthread_once.h"
 
 namespace brpc {
 namespace policy {
 
 namespace {
-MysqlAuthenticator* g_mysql_authenticator = NULL;
+butil::StringPiece mysql_native_password("mysql_native_password");
 };
 
-int MysqlAuthenticator::GenerateCredential(std::string* auth_str) const {
-    uint16_t capability = (_db == "" ? 0xa285 : 0xa68d);
-    uint16_t extended_capability = 0x0007;
+int MysqlPackAuthenticator(const MysqlReply::Auth* auth,
+                           const std::string* raw,
+                           std::string* auth_str) {
+    size_t pos1 = raw->find(':', 0);
+    size_t pos2 = raw->find(':', pos1 + 1);
+    size_t pos3 = raw->find(':', pos2 + 1);
+    std::string user = std::string(*raw, 0, pos1);
+    std::string passwd = std::string(*raw, pos1 + 1, pos2 - pos1 - 1);
+    std::string schema = std::string(*raw, pos2 + 1, pos3 - pos2 - 1);
+    MysqlCollation collation = (MysqlCollation)atoi(std::string(*raw, pos3 + 1).c_str());
+
+    uint16_t capability = (schema == "" ? 0x8285 : 0x868d) & auth->capability();
+    uint16_t extended_capability = 0x0007 & auth->extended_capability();
     uint32_t max_package_length = 16777216UL;
-    uint8_t language = 33;
     butil::IOBuf salt;
-    salt.append(_auth->salt().data(), _auth->salt().size());
-    salt.append(_auth->salt2().data(), _auth->salt2().size());
-    salt = mysql_build_mysql41_authentication_response(salt.to_string(), "", _passwd, "");
+    salt.append(auth->salt().data(), auth->salt().size());
+    salt.append(auth->salt2().data(), auth->salt2().size());
+    if (auth->auth_plugin() == mysql_native_password) {
+        salt = mysql_build_mysql41_authentication_response(salt.to_string(), passwd);
+    } else {
+        LOG(ERROR) << "no support auth plugin " << auth->auth_plugin();
+        return 1;
+    }
 
     butil::IOBuf payload;
     capability = butil::ByteSwapToLE16(capability);
@@ -47,51 +60,30 @@ int MysqlAuthenticator::GenerateCredential(std::string* auth_str) const {
     payload.append(&extended_capability, 2);
     max_package_length = butil::ByteSwapToLE32(max_package_length);
     payload.append(&max_package_length, 4);
-    payload.append(&language, 1);
+    payload.append(&collation, 1);
     for (int i = 0; i < 23; ++i)
-        payload.push_back(mysql_null_terminator[0]);
-    payload.append(_user);
+        payload.push_back('\0');
+    payload.append(user);
     payload.push_back('\0');
     payload.push_back((uint8_t)(salt.size()));
     payload.append(salt);
-    if (_db != "") {
-        payload.append(_db);
+    if (schema != "") {
+        payload.append(schema);
         payload.push_back('\0');
     }
     // payload.append("mysql_native_password");
     uint32_t payload_size = butil::ByteSwapToLE32(payload.size());
-    butil::IOBuf package;
-    package.append(&payload_size, 3);
-    package.push_back(0x01);
-    package.append(payload);
-    *auth_str = package.to_string();
+    butil::IOBuf message;
+    message.append(&payload_size, 3);
+    message.push_back(0x01);
+    message.append(payload);
+    *auth_str = message.to_string();
     return 0;
 }
 
-void MysqlAuthenticator::SaveAuth(const MysqlReply::Auth* auth) {
-    _auth = new MysqlReply::Auth(auth->protocol(),
-                                 auth->version(),
-                                 auth->thread_id(),
-                                 auth->salt(),
-                                 auth->capability(),
-                                 auth->language(),
-                                 auth->status(),
-                                 auth->extended_capability(),
-                                 auth->auth_plugin_length(),
-                                 auth->salt2());
-}
-
-MysqlAuthenticator* global_mysql_authenticator() {
-    // return butil::get_leaky_singleton<MysqlAuthenticator>();
-    return g_mysql_authenticator;
-}
-
-const Authenticator* global_mysql_authenticator(const std::string& user,
-                                                const std::string& passwd,
-                                                const std::string& db) {
-    // return butil::get_leaky_singleton<MysqlAuthenticator>();
-    g_mysql_authenticator = new MysqlAuthenticator(user, passwd, db);
-    return g_mysql_authenticator;
+int MysqlAuthenticator::GenerateCredential(std::string* auth_str) const {
+    // do nothing
+    return 0;
 }
 
 }  // namespace policy

@@ -24,33 +24,21 @@
 
 namespace brpc {
 
-const std::string mysql_null_terminator = std::string(1, 0x00);
-
-// struct MysqlAuthResponse {
-//     uint16_t capability;
-//     uint16_t extended_capability;
-//     uint32_t max_package_length;
-//     uint8_t language;
-//     butil::IOBuf user;
-//     butil::IOBuf salt;
-//     butil::IOBuf schema;
-// };
-
 struct MysqlHeader {
     uint32_t payload_size;
     uint32_t seq;
 };
 
-enum MysqlRspType {
+enum MysqlRspType : unsigned char {
     RSP_OK = 0x00,
     RSP_ERROR = 0xFF,
     RSP_RESULTSET = 0x01,
     RSP_EOF = 0xFE,
     RSP_AUTH = 0xFB,     // add for mysql auth
-    RSP_UNKNOWN = 0xFC,  // add for error case
+    RSP_UNKNOWN = 0xFC,  // add for other case
 };
 
-enum MysqlFieldType {
+enum MysqlFieldType : unsigned char {
     FIELD_TYPE_DECIMAL = 0x00,
     FIELD_TYPE_TINY = 0x01,
     FIELD_TYPE_SHORT = 0x02,
@@ -81,7 +69,7 @@ enum MysqlFieldType {
     FIELD_TYPE_GEOMETRY = 0xFF,
 };
 
-enum MysqlFieldFlag {
+enum MysqlFieldFlag : unsigned short {
     NOT_NULL_FLAG = 0x0001,
     PRI_KEY_FLAG = 0x0002,
     UNIQUE_KEY_FLAG = 0x0004,
@@ -96,7 +84,7 @@ enum MysqlFieldFlag {
     SET_FLAG = 0x0800,
 };
 
-enum MysqlServerStatus {
+enum MysqlServerStatus : unsigned short {
     SERVER_STATUS_IN_TRANS = 1,
     SERVER_STATUS_AUTOCOMMIT = 2,   /* Server in auto_commit mode */
     SERVER_MORE_RESULTS_EXISTS = 8, /* Multi query - next query exists */
@@ -147,16 +135,6 @@ public:
     // Mysql Auth package
     class Auth {
     public:
-        Auth(const uint8_t protocol,
-             const butil::StringPiece version,
-             const uint32_t thread_id,
-             const butil::StringPiece salt,
-             const uint16_t capability,
-             const uint8_t language,
-             const uint16_t status,
-             const uint16_t extended_capability,
-             const uint8_t auth_plugin_length,
-             const butil::StringPiece salt2);
         uint8_t protocol() const;
         butil::StringPiece version() const;
         uint32_t thread_id() const;
@@ -167,6 +145,7 @@ public:
         uint16_t extended_capability() const;
         uint8_t auth_plugin_length() const;
         butil::StringPiece salt2() const;
+        butil::StringPiece auth_plugin() const;
 
     private:
         bool parseAuth(butil::IOBuf& buf, butil::Arena* arena);
@@ -186,7 +165,7 @@ public:
         uint16_t _extended_capability;
         uint8_t _auth_plugin_length;
         butil::StringPiece _salt2;
-        // butil::IOBuf auth_plugin;
+        butil::StringPiece _auth_plugin;
         // if it is parsed
         bool _is_parsed;
     };
@@ -581,6 +560,9 @@ inline uint8_t MysqlReply::Auth::auth_plugin_length() const {
 }
 inline butil::StringPiece MysqlReply::Auth::salt2() const {
     return _salt2;
+}
+inline butil::StringPiece MysqlReply::Auth::auth_plugin() const {
+    return _auth_plugin;
 }
 inline bool MysqlReply::Auth::is_parsed() const {
     return _is_parsed;

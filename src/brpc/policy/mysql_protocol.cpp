@@ -17,6 +17,7 @@
 #include <google/protobuf/descriptor.h>  // MethodDescriptor
 #include <google/protobuf/message.h>     // Message
 #include <gflags/gflags.h>
+#include <sstream>
 #include "butil/logging.h"  // LOG()
 #include "butil/time.h"
 #include "butil/iobuf.h"  // butil::IOBuf
@@ -80,54 +81,56 @@ ParseResult ParseMysqlMessage(butil::IOBuf* source,
             socket->GivebackPipelinedInfo(pi);
             return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
         }
-        LOG(INFO) << "pi with auth:" << pi.with_auth;
         if (pi.with_auth) {
-          if (FLAGS_mysql_verbose) {
-            LOG(INFO) << "\n[MYSQL RESPONSE] " << msg->response;
-          }
-          MysqlAuthenticator* auth = global_mysql_authenticator();
-          const MysqlReply &reply = msg->response.reply(0);
-          if (reply.is_auth()) {
-            auth->SaveAuth(reply.auth());
-            std::string auth_data;
-            if (auth->GenerateCredential(&auth_data) != 0) {
-              LOG(INFO) << "[MYSQL PARSE] authentication step one";
-              return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+            if (FLAGS_mysql_verbose) {
+                LOG(INFO) << "\n[MYSQL RESPONSE] " << msg->response;
             }
-            butil::IOBuf auth_resp;
-            auth_resp.append(auth_data);
-            auth_resp.cut_into_file_descriptor(socket->fd());
-          } else if (reply.is_ok()) {
-            butil::IOBuf& raw_req = auth->raw_req();
-            raw_req.cut_into_file_descriptor(socket->fd());
-            pi.with_auth = false;
-          } else {
-            LOG(ERROR) << "[MYSQL PARSE] wrong authentication step";
-            return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
-          }
-          // if (auth->CurrStep() == MYSQL_AUTH_STEP_ONE) {  // receive auth & send auth
-          //     auth->SaveAuth(msg->response.reply(0).auth());
-          //     std::string auth_data;
-          //     if (auth->GenerateCredential(&auth_data) != 0) {
-          //         LOG(INFO) << "[MYSQL PARSE] authentication step one";
-          //         return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
-          //     }
-          //     butil::IOBuf auth_resp;
-          //     auth_resp.append(auth_data);
-          //     auth_resp.cut_into_file_descriptor(socket->fd());
-          //     auth->NextStep();
-          // } else if (auth->CurrStep() == MYSQL_AUTH_STEP_TWO) {  // check auth & send request
-          //     butil::IOBuf& raw_req = auth->raw_req();
-          //     raw_req.cut_into_file_descriptor(socket->fd());
-          //     pi.with_auth = false;
-          // } else {
-          //     LOG(ERROR) << "[MYSQL PARSE] wrong authentication step";
-          //     return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
-          // }
-          DestroyingPtr<InputResponse> auth_msg =
-              static_cast<InputResponse*>(socket->release_parsing_context());
-          socket->GivebackPipelinedInfo(pi);
-          return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
+            const bthread_id_t cid = pi.id_wait;
+            Controller* cntl = NULL;
+            if (bthread_id_lock(cid, (void**)&cntl) != 0) {
+                LOG(ERROR) << "[MYSQL PARSE] fail to lock controller";
+                return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+            }
+            const AuthContext* ctx = cntl->auth_context();
+            if (ctx == NULL) {
+                LOG(ERROR) << "[MYSQL PARSE] auth context is null";
+                return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+            }
+            const MysqlReply& reply = msg->response.reply(0);
+            if (reply.is_auth()) {
+                std::string auth_str;
+                if (MysqlPackAuthenticator(reply.auth(), &ctx->user(), &auth_str) != 0) {
+                    bthread_id_unlock(cid);
+                    LOG(ERROR) << "[MYSQL PARSE] wrong pack authentication data";
+                    return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+                }
+                butil::IOBuf auth_resp;
+                auth_resp.append(auth_str);
+                auth_resp.cut_into_file_descriptor(socket->fd());
+            } else if (reply.is_ok()) {
+                butil::IOBuf raw_req;
+                raw_req.append(ctx->starter());
+                raw_req.cut_into_file_descriptor(socket->fd());
+                pi.with_auth = false;
+            } else if (reply.is_error()) {
+                bthread_id_unlock(cid);
+                LOG(ERROR) << reply;
+                return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+            } else {
+                bthread_id_unlock(cid);
+                LOG(ERROR) << "[MYSQL PARSE] wrong authentication step";
+                return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+            }
+
+            if (bthread_id_unlock(cid) != 0) {
+                LOG(ERROR) << "[MYSQL PARSE] fail to unlock controller";
+                return MakeParseError(PARSE_ERROR_ABSOLUTELY_WRONG);
+            }
+
+            DestroyingPtr<InputResponse> auth_msg =
+                static_cast<InputResponse*>(socket->release_parsing_context());
+            socket->GivebackPipelinedInfo(pi);
+            return MakeParseError(PARSE_ERROR_NOT_ENOUGH_DATA);
         }
 
         msg->id_wait = pi.id_wait;
@@ -205,15 +208,20 @@ void PackMysqlRequest(butil::IOBuf* buf,
                       Controller* cntl,
                       const butil::IOBuf& request,
                       const Authenticator* auth) {
-  LOG(INFO) << "auth=" << auth;
     if (auth) {
         const MysqlAuthenticator* my_auth(dynamic_cast<const MysqlAuthenticator*>(auth));
         if (my_auth == NULL) {
             LOG(ERROR) << "[MYSQL PACK] there is not MysqlAuthenticator";
             return;
         }
+        AuthContext* ctx = new AuthContext;
+        std::stringstream ss;
+        ss << my_auth->user() << ":" << my_auth->passwd() << ":" << my_auth->schema() << ":"
+           << my_auth->collation();
+        ctx->set_user(ss.str());
+        ctx->set_starter(request.to_string());
+        ControllerPrivateAccessor(cntl).set_auth_context(ctx);
         ControllerPrivateAccessor(cntl).add_with_auth();
-        my_auth->raw_req() = request;
     } else {
         buf->append(request);
     }

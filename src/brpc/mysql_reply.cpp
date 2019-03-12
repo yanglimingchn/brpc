@@ -6,7 +6,7 @@ namespace brpc {
 #define MY_ERROR_RET(expr, message) \
     do {                            \
         if ((expr) == true) {       \
-            LOG(FATAL) << message;  \
+            LOG(INFO) << message;   \
             return false;           \
         }                           \
     } while (0)
@@ -26,14 +26,6 @@ inline bool my_alloc_check(butil::Arena* arena, const size_t n, Type*& pointer) 
     }
     return true;
 }
-
-// inline void* alloc_and_init(butil::Arena* arena, size_t n) {
-//     void* p = arena->allocate(n);
-//     if (p == NULL)
-//         return NULL;
-//     memset(p, 0, n);
-//     return p;
-// }
 
 const char* MysqlFieldTypeToString(MysqlFieldType type) {
     switch (type) {
@@ -124,8 +116,8 @@ bool ParseHeader(butil::IOBuf& buf, MysqlHeader* value) {
     }
     uint32_t payload_size = mysql_uint3korr(p);
     if (buf.size() < payload_size + 4) {
-        LOG(ERROR) << "IOBuf not enough full mysql message buf size:" << buf.size()
-                   << " message size:" << payload_size + 4;
+        LOG(INFO) << "IOBuf not enough full mysql message buf size:" << buf.size()
+                  << " message size:" << payload_size + 4;
         return false;
     }
 
@@ -175,7 +167,7 @@ bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf,
         return false;
     }
     uint8_t type = _type == RSP_UNKNOWN ? p[4] : (uint8_t)_type;
-    if (is_auth && type != 0x00) {
+    if (is_auth && type != 0x00 && type != 0xFF) {
         _type = RSP_AUTH;
         Auth* auth = NULL;
         MY_ALLOC_CHECK(my_alloc_check(arena, 1, auth));
@@ -275,7 +267,8 @@ void MysqlReply::Print(std::ostream& os) const {
            << "\ncapacity:" << auth._capability << "\nlanguage:" << (unsigned)auth._language
            << "\nstatus:" << auth._status << "\nextended_capacity:" << auth._extended_capability
            << "\nauth_plugin_length:" << auth._auth_plugin_length
-           << "\nsalt2:" << auth._salt2.as_string();
+           << "\nsalt2:" << auth._salt2.as_string()
+           << "\nauth_plugin:" << auth._auth_plugin.as_string();
     } else if (_type == RSP_OK) {
         const Ok& ok = *_data.ok;
         os << "\naffect_row:" << ok._affect_row << "\nindex:" << ok._index
@@ -381,33 +374,8 @@ void MysqlReply::Print(std::ostream& os) const {
     }
 }
 
-MysqlReply::Auth::Auth(const uint8_t protocol,
-                       const butil::StringPiece version,
-                       const uint32_t thread_id,
-                       const butil::StringPiece salt,
-                       const uint16_t capability,
-                       const uint8_t language,
-                       const uint16_t status,
-                       const uint16_t extended_capability,
-                       const uint8_t auth_plugin_length,
-                       const butil::StringPiece salt2) {
-    std::string* p = NULL;
-    _protocol = protocol;
-    p = new std::string(version.data(), version.size());
-    _version.set(p->data(), p->size());
-    _thread_id = thread_id;
-    p = new std::string(salt.data(), salt.size());
-    _salt.set(p->data(), p->size());
-    _capability = capability;
-    _language = language;
-    _status = status;
-    _extended_capability = extended_capability;
-    _auth_plugin_length = auth_plugin_length;
-    p = new std::string(salt2.data(), salt2.size());
-    _salt2.set(p->data(), p->size());
-}
-
 bool MysqlReply::Auth::parseAuth(butil::IOBuf& buf, butil::Arena* arena) {
+    const std::string delim(1, 0x00);
     if (is_parsed()) {
         return true;
     }
@@ -418,7 +386,7 @@ bool MysqlReply::Auth::parseAuth(butil::IOBuf& buf, butil::Arena* arena) {
     buf.cut1((char*)&_protocol);
     {
         butil::IOBuf version;
-        buf.cut_until(&version, mysql_null_terminator);
+        buf.cut_until(&version, delim);
         char* d = NULL;
         MY_ALLOC_CHECK(my_alloc_check(arena, version.size(), d));
         version.copy_to(d);
@@ -431,7 +399,7 @@ bool MysqlReply::Auth::parseAuth(butil::IOBuf& buf, butil::Arena* arena) {
     }
     {
         butil::IOBuf salt;
-        buf.cut_until(&salt, mysql_null_terminator);
+        buf.cut_until(&salt, delim);
         char* d = NULL;
         MY_ALLOC_CHECK(my_alloc_check(arena, salt.size(), d));
         salt.copy_to(d);
@@ -457,11 +425,17 @@ bool MysqlReply::Auth::parseAuth(butil::IOBuf& buf, butil::Arena* arena) {
     buf.pop_front(10);
     {
         butil::IOBuf salt2;
-        buf.cut_until(&salt2, mysql_null_terminator);
+        buf.cut_until(&salt2, delim);
         char* d = NULL;
         MY_ALLOC_CHECK(my_alloc_check(arena, salt2.size(), d));
         salt2.copy_to(d);
         _salt2.set(d, salt2.size());
+    }
+    {
+        char* d = NULL;
+        MY_ALLOC_CHECK(my_alloc_check(arena, _auth_plugin_length, d));
+        buf.cutn(d, _auth_plugin_length);
+        _auth_plugin.set(d, _auth_plugin_length);
     }
     buf.clear();  // consume all buf
     set_parsed();

@@ -426,7 +426,7 @@ label_reparse:
     size_t oldsize = buf.size();
     if (reply_size() == 0) {
         if (!_first_reply.ConsumePartialIOBuf(buf, &_arena, is_auth, &is_multi)) {
-            LOG(ERROR) << "mysql reply parse error";
+            LOG(INFO) << "mysql reply parse error";
             return false;
         }
 
@@ -450,7 +450,7 @@ label_reparse:
         }
         new (&_other_replies[_nreply - 1]) MysqlReply;
         if (!_other_replies[_nreply - 1].ConsumePartialIOBuf(buf, &_arena, is_auth, &is_multi)) {
-            LOG(ERROR) << "mysql reply parse error";
+            LOG(INFO) << "mysql reply parse error";
             return false;
         }
 
@@ -479,10 +479,9 @@ std::ostream& operator<<(std::ostream& os, const MysqlResponse& response) {
         os << response.reply(0);
     } else {
         for (int i = 0; i < response.reply_size(); ++i) {
-          os << "\nreply(" << i << ")----------";
+            os << "\nreply(" << i << ")----------";
             os << response.reply(i);
         }
-
     }
     os << "\n-----MYSQL REPLY END-----\n";
 

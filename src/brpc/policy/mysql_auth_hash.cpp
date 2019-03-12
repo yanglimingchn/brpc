@@ -31,7 +31,8 @@
 #include "mysql_auth_hash.h"
 #include <stdint.h>
 #include <stdexcept>
-#include <string.h>  // memset
+#include <string.h>         // memset
+#include "butil/logging.h"  // LOG()
 
 // Avoid warnings from protobuf
 #if defined __GNUC__
@@ -181,33 +182,13 @@ static char* octet2hex(char* to, const char* str, size_t len) {
 
 // MYSQL41 specific
 
-static std::string get_password_from_salt_mysql41(const std::string& hash_stage2) {
-    std::string result(2 * SHA1_HASH_SIZE + 1, '\0');
-
-    if (hash_stage2.length() != SHA1_HASH_SIZE)
-        throw std::invalid_argument("Wrong size of binary hash password");
-
-    result[0] = PVERSION41_CHAR;
-    octet2hex(&result[1], &hash_stage2[0], SHA1_HASH_SIZE);
-
-    return result;
-}
-
-
 std::string brpc::policy::mysql_build_mysql41_authentication_response(const std::string& salt_data,
-                                                                      const std::string& user,
-                                                                      const std::string& password,
-                                                                      const std::string& schema) {
+                                                                      const std::string& password) {
     std::string data;
     std::string password_hash;
-
     if (password.length()) {
         password_hash = scramble<class SHA>(salt_data, password);
-        // password_hash = get_password_from_salt_mysql41(password_hash);
     }
-
-    // data.append(schema).push_back('\0');  // authz
-    // data.append(user).push_back('\0');    // authc
     data.append(password_hash);  // pass
 
     return data;
