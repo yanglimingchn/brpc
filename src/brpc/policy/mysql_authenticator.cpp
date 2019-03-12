@@ -26,23 +26,25 @@ namespace brpc {
 namespace policy {
 
 namespace {
-butil::StringPiece mysql_native_password("mysql_native_password");
+const butil::StringPiece mysql_native_password("mysql_native_password");
 };
 
 int MysqlPackAuthenticator(const MysqlReply::Auth* auth,
                            const std::string* raw,
                            std::string* auth_str) {
-    size_t pos1 = raw->find(':', 0);
-    size_t pos2 = raw->find(':', pos1 + 1);
-    size_t pos3 = raw->find(':', pos2 + 1);
-    std::string user = std::string(*raw, 0, pos1);
-    std::string passwd = std::string(*raw, pos1 + 1, pos2 - pos1 - 1);
-    std::string schema = std::string(*raw, pos2 + 1, pos3 - pos2 - 1);
-    MysqlCollation collation = (MysqlCollation)atoi(std::string(*raw, pos3 + 1).c_str());
+    const size_t pos1 = raw->find(':', 0);
+    const size_t pos2 = raw->find(':', pos1 + 1);
+    const size_t pos3 = raw->find(':', pos2 + 1);
+    const std::string user = std::string(*raw, 0, pos1);
+    const std::string passwd = std::string(*raw, pos1 + 1, pos2 - pos1 - 1);
+    const std::string schema = std::string(*raw, pos2 + 1, pos3 - pos2 - 1);
+    const MysqlCollation collation = (MysqlCollation)atoi(std::string(*raw, pos3 + 1).c_str());
 
-    uint16_t capability = (schema == "" ? 0x8285 : 0x868d) & auth->capability();
-    uint16_t extended_capability = 0x0007 & auth->extended_capability();
-    uint32_t max_package_length = 16777216UL;
+    const uint16_t capability =
+        butil::ByteSwapToLE16((schema == "" ? 0x8285 : 0x868d) & auth->capability());
+    const uint16_t extended_capability =
+        butil::ByteSwapToLE16(0x000f & auth->extended_capability());
+    const uint32_t max_package_length = butil::ByteSwapToLE32(16777216UL);
     butil::IOBuf salt;
     salt.append(auth->salt().data(), auth->salt().size());
     salt.append(auth->salt2().data(), auth->salt2().size());
@@ -54,11 +56,8 @@ int MysqlPackAuthenticator(const MysqlReply::Auth* auth,
     }
 
     butil::IOBuf payload;
-    capability = butil::ByteSwapToLE16(capability);
     payload.append(&capability, 2);
-    extended_capability = butil::ByteSwapToLE16(extended_capability);
     payload.append(&extended_capability, 2);
-    max_package_length = butil::ByteSwapToLE32(max_package_length);
     payload.append(&max_package_length, 4);
     payload.append(&collation, 1);
     for (int i = 0; i < 23; ++i)
@@ -71,11 +70,17 @@ int MysqlPackAuthenticator(const MysqlReply::Auth* auth,
         payload.append(schema);
         payload.push_back('\0');
     }
-    // payload.append("mysql_native_password");
-    uint32_t payload_size = butil::ByteSwapToLE32(payload.size());
+    if (auth->auth_plugin() == mysql_native_password) {
+        LOG(INFO) << mysql_native_password.size();
+        payload.append(mysql_native_password.data(), mysql_native_password.size());
+        payload.push_back('\0');
+    }
     butil::IOBuf message;
+    const uint32_t payload_size = butil::ByteSwapToLE32(payload.size());
+    // header
     message.append(&payload_size, 3);
     message.push_back(0x01);
+    // payload
     message.append(payload);
     *auth_str = message.to_string();
     return 0;

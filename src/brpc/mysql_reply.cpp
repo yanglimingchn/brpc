@@ -21,6 +21,7 @@ inline bool my_alloc_check(butil::Arena* arena, const size_t n, Type*& pointer) 
             return false;
         }
         for (size_t i = 0; i < n; ++i) {
+            // new (pointer + i) Type;
             memset(pointer + i, 0, sizeof(Type));
         }
     }

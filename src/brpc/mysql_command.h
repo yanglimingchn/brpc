@@ -21,7 +21,7 @@
 #define BRPC_MYSQL_COMMAND_H
 namespace brpc {
 // mysql command types
-enum MysqlCommandType {
+enum MysqlCommandType : unsigned char {
     COM_SLEEP,
     COM_QUIT,
     COM_INIT_DB,
