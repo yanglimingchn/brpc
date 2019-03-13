@@ -217,7 +217,7 @@ void PackMysqlRequest(butil::IOBuf* buf,
         AuthContext* ctx = new AuthContext;
         std::stringstream ss;
         ss << my_auth->user() << ":" << my_auth->passwd() << ":" << my_auth->schema() << ":"
-           << my_auth->collation();
+           << (uint16_t)my_auth->collation();
         ctx->set_user(ss.str());
         ctx->set_starter(request.to_string());
         ControllerPrivateAccessor(cntl).set_auth_context(ctx);

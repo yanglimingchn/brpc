@@ -289,7 +289,7 @@ void MysqlReply::Print(std::ostream& os) const {
                << i << "].origin_table:" << r._columns[i]._origin_table.as_string() << "\ncolumn["
                << i << "].name:" << r._columns[i]._name.as_string() << "\ncolumn[" << i
                << "].origin_name:" << r._columns[i]._origin_name.as_string() << "\ncolumn[" << i
-               << "].charset:" << r._columns[i]._charset << "\ncolumn[" << i
+               << "].collation:" << (uint16_t)r._columns[i]._collation << "\ncolumn[" << i
                << "].length:" << r._columns[i]._length << "\ncolumn[" << i
                << "].type:" << (unsigned)r._columns[i]._type << "\ncolumn[" << i
                << "].flag:" << (unsigned)r._columns[i]._flag << "\ncolumn[" << i
@@ -299,7 +299,7 @@ void MysqlReply::Print(std::ostream& os) const {
         os << "\neof1.status:" << r._eof1._status;
         int n = 0;
         for (const Row* row = r._first; row != NULL; row = row->_next) {
-            os << "\nrow(" << ++n << "):";
+            os << "\nrow(" << n++ << "):";
             for (uint64_t j = 0; j < r._header._column_number; ++j) {
                 switch (r._columns[j]._type) {
                     case FIELD_TYPE_TINY:
@@ -513,7 +513,7 @@ bool MysqlReply::Column::parseColumn(butil::IOBuf& buf, butil::Arena* arena) {
     {
         uint8_t tmp[2];
         buf.cutn(tmp, sizeof(tmp));
-        _charset = mysql_uint2korr(tmp);
+        _collation = (MysqlCollation)mysql_uint2korr(tmp);
     }
     {
         uint8_t tmp[4];

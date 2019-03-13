@@ -32,7 +32,7 @@
 
 namespace brpc {
 
-DEFINE_int32(mysql_max_replies, 10, "maximum replies size in one MysqlResponse");
+DEFINE_int32(mysql_max_replies, 50, "maximum replies size in one MysqlResponse");
 DEFINE_bool(mysql_verbose_crlf2space, false, "[DEBUG] Show \\r\\n as a space");
 
 // Internal implementation detail -- do not call these.
