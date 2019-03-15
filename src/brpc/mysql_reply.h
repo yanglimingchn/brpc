@@ -29,325 +29,324 @@ struct MysqlHeader {
     uint32_t seq;
 };
 
-enum MysqlRspType : unsigned char {
-    RSP_OK = 0x00,
-    RSP_ERROR = 0xFF,
-    RSP_RESULTSET = 0x01,
-    RSP_EOF = 0xFE,
-    RSP_AUTH = 0xFB,     // add for mysql auth
-    RSP_UNKNOWN = 0xFC,  // add for other case
+enum MysqlRspType : uint8_t {
+    MYSQL_RSP_OK = 0x00,
+    MYSQL_RSP_ERROR = 0xFF,
+    MYSQL_RSP_RESULTSET = 0x01,
+    MYSQL_RSP_EOF = 0xFE,
+    MYSQL_RSP_AUTH = 0xFB,     // add for mysql auth
+    MYSQL_RSP_UNKNOWN = 0xFC,  // add for other case
 };
 
-enum MysqlFieldType : unsigned char {
-    FIELD_TYPE_DECIMAL = 0x00,
-    FIELD_TYPE_TINY = 0x01,
-    FIELD_TYPE_SHORT = 0x02,
-    FIELD_TYPE_LONG = 0x03,
-    FIELD_TYPE_FLOAT = 0x04,
-    FIELD_TYPE_DOUBLE = 0x05,
-    FIELD_TYPE_NULL = 0x06,
-    FIELD_TYPE_TIMESTAMP = 0x07,
-    FIELD_TYPE_LONGLONG = 0x08,
-    FIELD_TYPE_INT24 = 0x09,
-    FIELD_TYPE_DATE = 0x0A,
-    FIELD_TYPE_TIME = 0x0B,
-    FIELD_TYPE_DATETIME = 0x0C,
-    FIELD_TYPE_YEAR = 0x0D,
-    FIELD_TYPE_NEWDATE = 0x0E,
-    FIELD_TYPE_VARCHAR = 0x0F,
-    FIELD_TYPE_BIT = 0x10,
-    FIELD_TYPE_JSON = 0xF5,
-    FIELD_TYPE_NEWDECIMAL = 0xF6,
-    FIELD_TYPE_ENUM = 0xF7,
-    FIELD_TYPE_SET = 0xF8,
-    FIELD_TYPE_TINY_BLOB = 0xF9,
-    FIELD_TYPE_MEDIUM_BLOB = 0xFA,
-    FIELD_TYPE_LONG_BLOB = 0xFB,
-    FIELD_TYPE_BLOB = 0xFC,
-    FIELD_TYPE_VAR_STRING = 0xFD,
-    FIELD_TYPE_STRING = 0xFE,
-    FIELD_TYPE_GEOMETRY = 0xFF,
+enum MysqlFieldType : uint8_t {
+    MYSQL_FIELD_TYPE_DECIMAL = 0x00,
+    MYSQL_FIELD_TYPE_TINY = 0x01,
+    MYSQL_FIELD_TYPE_SHORT = 0x02,
+    MYSQL_FIELD_TYPE_LONG = 0x03,
+    MYSQL_FIELD_TYPE_FLOAT = 0x04,
+    MYSQL_FIELD_TYPE_DOUBLE = 0x05,
+    MYSQL_FIELD_TYPE_NULL = 0x06,
+    MYSQL_FIELD_TYPE_TIMESTAMP = 0x07,
+    MYSQL_FIELD_TYPE_LONGLONG = 0x08,
+    MYSQL_FIELD_TYPE_INT24 = 0x09,
+    MYSQL_FIELD_TYPE_DATE = 0x0A,
+    MYSQL_FIELD_TYPE_TIME = 0x0B,
+    MYSQL_FIELD_TYPE_DATETIME = 0x0C,
+    MYSQL_FIELD_TYPE_YEAR = 0x0D,
+    MYSQL_FIELD_TYPE_NEWDATE = 0x0E,
+    MYSQL_FIELD_TYPE_VARCHAR = 0x0F,
+    MYSQL_FIELD_TYPE_BIT = 0x10,
+    MYSQL_FIELD_TYPE_JSON = 0xF5,
+    MYSQL_FIELD_TYPE_NEWDECIMAL = 0xF6,
+    MYSQL_FIELD_TYPE_ENUM = 0xF7,
+    MYSQL_FIELD_TYPE_SET = 0xF8,
+    MYSQL_FIELD_TYPE_TINY_BLOB = 0xF9,
+    MYSQL_FIELD_TYPE_MEDIUM_BLOB = 0xFA,
+    MYSQL_FIELD_TYPE_LONG_BLOB = 0xFB,
+    MYSQL_FIELD_TYPE_BLOB = 0xFC,
+    MYSQL_FIELD_TYPE_VAR_STRING = 0xFD,
+    MYSQL_FIELD_TYPE_STRING = 0xFE,
+    MYSQL_FIELD_TYPE_GEOMETRY = 0xFF,
 };
 
-enum MysqlFieldFlag : unsigned short {
-    NOT_NULL_FLAG = 0x0001,
-    PRI_KEY_FLAG = 0x0002,
-    UNIQUE_KEY_FLAG = 0x0004,
-    MULTIPLE_KEY_FLAG = 0x0008,
-    BLOB_FLAG = 0x0010,
-    UNSIGNED_FLAG = 0x0020,
-    ZEROFILL_FLAG = 0x0040,
-    BINARY_FLAG = 0x0080,
-    ENUM_FLAG = 0x0100,
-    AUTO_INCREMENT_FLAG = 0x0200,
-    TIMESTAMP_FLAG = 0x0400,
-    SET_FLAG = 0x0800,
+enum MysqlFieldFlag : uint16_t {
+    MYSQL_NOT_NULL_FLAG = 0x0001,
+    MYSQL_PRI_KEY_FLAG = 0x0002,
+    MYSQL_UNIQUE_KEY_FLAG = 0x0004,
+    MYSQL_MULTIPLE_KEY_FLAG = 0x0008,
+    MYSQL_BLOB_FLAG = 0x0010,
+    MYSQL_UNSIGNED_FLAG = 0x0020,
+    MYSQL_ZEROFILL_FLAG = 0x0040,
+    MYSQL_BINARY_FLAG = 0x0080,
+    MYSQL_ENUM_FLAG = 0x0100,
+    MYSQL_AUTO_INCREMENT_FLAG = 0x0200,
+    MYSQL_TIMESTAMP_FLAG = 0x0400,
+    MYSQL_SET_FLAG = 0x0800,
 };
 
-enum MysqlServerStatus : unsigned short {
-    SERVER_STATUS_IN_TRANS = 1,
-    SERVER_STATUS_AUTOCOMMIT = 2,   /* Server in auto_commit mode */
-    SERVER_MORE_RESULTS_EXISTS = 8, /* Multi query - next query exists */
-    SERVER_QUERY_NO_GOOD_INDEX_USED = 16,
-    SERVER_QUERY_NO_INDEX_USED = 32,
+enum MysqlServerStatus : uint16_t {
+    MYSQL_SERVER_STATUS_IN_TRANS = 1,
+    MYSQL_SERVER_STATUS_AUTOCOMMIT = 2,   /* Server in auto_commit mode */
+    MYSQL_SERVER_MORE_RESULTS_EXISTS = 8, /* Multi query - next query exists */
+    MYSQL_SERVER_QUERY_NO_GOOD_INDEX_USED = 16,
+    MYSQL_SERVER_QUERY_NO_INDEX_USED = 32,
     /**
       The server was able to fulfill the clients request and opened a
       read-only non-scrollable cursor for a query. This flag comes
       in reply to COM_STMT_EXECUTE and COM_STMT_FETCH commands.
     */
-    SERVER_STATUS_CURSOR_EXISTS = 64,
+    MYSQL_SERVER_STATUS_CURSOR_EXISTS = 64,
     /**
       This flag is sent when a read-only cursor is exhausted, in reply to
       COM_STMT_FETCH command.
     */
-    SERVER_STATUS_LAST_ROW_SENT = 128,
-    SERVER_STATUS_DB_DROPPED = 256, /* A database was dropped */
-    SERVER_STATUS_NO_BACKSLASH_ESCAPES = 512,
+    MYSQL_SERVER_STATUS_LAST_ROW_SENT = 128,
+    MYSQL_SERVER_STATUS_DB_DROPPED = 256, /* A database was dropped */
+    MYSQL_SERVER_STATUS_NO_BACKSLASH_ESCAPES = 512,
     /**
       Sent to the client if after a prepared statement reprepare
       we discovered that the new statement returns a different
       number of result set columns.
     */
-    SERVER_STATUS_METADATA_CHANGED = 1024,
-    SERVER_QUERY_WAS_SLOW = 2048,
+    MYSQL_SERVER_STATUS_METADATA_CHANGED = 1024,
+    MYSQL_SERVER_QUERY_WAS_SLOW = 2048,
 
     /**
       To mark ResultSet containing output parameter values.
     */
-    SERVER_PS_OUT_PARAMS = 4096,
+    MYSQL_SERVER_PS_OUT_PARAMS = 4096,
 
     /**
-      Set at the same time as SERVER_STATUS_IN_TRANS if the started
+      Set at the same time as MYSQL_SERVER_STATUS_IN_TRANS if the started
       multi-statement transaction is a read-only transaction. Cleared
       when the transaction commits or aborts. Since this flag is sent
       to clients in OK and EOF packets, the flag indicates the
       transaction status at the end of command execution.
     */
-    SERVER_STATUS_IN_TRANS_READONLY = 8192,
-    SERVER_SESSION_STATE_CHANGED = 1UL << 14,
+    MYSQL_SERVER_STATUS_IN_TRANS_READONLY = 8192,
+    MYSQL_SERVER_SESSION_STATE_CHANGED = 1UL << 14,
 };
-
 // Msql Collation
-enum MysqlCollation : unsigned short {
-    big5_chinese_ci = 1,
-    latin2_czech_cs = 2,
-    dec8_swedish_ci = 3,
-    cp850_general_ci = 4,
-    latin1_german1_ci = 5,
-    hp8_english_ci = 6,
-    koi8r_general_ci = 7,
-    latin1_swedish_ci = 8,
-    latin2_general_ci = 9,
-    swe7_swedish_ci = 10,
-    ascii_general_ci = 11,
-    ujis_japanese_ci = 12,
-    sjis_japanese_ci = 13,
-    cp1251_bulgarian_ci = 14,
-    latin1_danish_ci = 15,
-    hebrew_general_ci = 16,
-    tis620_thai_ci = 18,
-    euckr_korean_ci = 19,
-    latin7_estonian_cs = 20,
-    latin2_hungarian_ci = 21,
-    koi8u_general_ci = 22,
-    cp1251_ukrainian_ci = 23,
-    gb2312_chinese_ci = 24,
-    greek_general_ci = 25,
-    cp1250_general_ci = 26,
-    latin2_croatian_ci = 27,
-    gbk_chinese_ci = 28,
-    cp1257_lithuanian_ci = 29,
-    latin5_turkish_ci = 30,
-    latin1_german2_ci = 31,
-    armscii8_general_ci = 32,
-    utf8_general_ci = 33,
-    cp1250_czech_cs = 34,
-    ucs2_general_ci = 35,
-    cp866_general_ci = 36,
-    keybcs2_general_ci = 37,
-    macce_general_ci = 38,
-    macroman_general_ci = 39,
-    cp852_general_ci = 40,
-    latin7_general_ci = 41,
-    latin7_general_cs = 42,
-    macce_bin = 43,
-    cp1250_croatian_ci = 44,
-    utf8mb4_general_ci = 45,
-    utf8mb4_bin = 46,
-    latin1_bin = 47,
-    latin1_general_ci = 48,
-    latin1_general_cs = 49,
-    cp1251_bin = 50,
-    cp1251_general_ci = 51,
-    cp1251_general_cs = 52,
-    macroman_bin = 53,
-    utf16_general_ci = 54,
-    utf16_bin = 55,
-    utf16le_general_ci = 56,
-    cp1256_general_ci = 57,
-    cp1257_bin = 58,
-    cp1257_general_ci = 59,
-    utf32_general_ci = 60,
-    utf32_bin = 61,
-    utf16le_bin = 62,
-    binary = 63,
-    armscii8_bin = 64,
-    ascii_bin = 65,
-    cp1250_bin = 66,
-    cp1256_bin = 67,
-    cp866_bin = 68,
-    dec8_bin = 69,
-    greek_bin = 70,
-    hebrew_bin = 71,
-    hp8_bin = 72,
-    keybcs2_bin = 73,
-    koi8r_bin = 74,
-    koi8u_bin = 75,
-    latin2_bin = 77,
-    latin5_bin = 78,
-    latin7_bin = 79,
-    cp850_bin = 80,
-    cp852_bin = 81,
-    swe7_bin = 82,
-    utf8_bin = 83,
-    big5_bin = 84,
-    euckr_bin = 85,
-    gb2312_bin = 86,
-    gbk_bin = 87,
-    sjis_bin = 88,
-    tis620_bin = 89,
-    ucs2_bin = 90,
-    ujis_bin = 91,
-    geostd8_general_ci = 92,
-    geostd8_bin = 93,
-    latin1_spanish_ci = 94,
-    cp932_japanese_ci = 95,
-    cp932_bin = 96,
-    eucjpms_japanese_ci = 97,
-    eucjpms_bin = 98,
-    cp1250_polish_ci = 99,
-    utf16_unicode_ci = 101,
-    utf16_icelandic_ci = 102,
-    utf16_latvian_ci = 103,
-    utf16_romanian_ci = 104,
-    utf16_slovenian_ci = 105,
-    utf16_polish_ci = 106,
-    utf16_estonian_ci = 107,
-    utf16_spanish_ci = 108,
-    utf16_swedish_ci = 109,
-    utf16_turkish_ci = 110,
-    utf16_czech_ci = 111,
-    utf16_danish_ci = 112,
-    utf16_lithuanian_ci = 113,
-    utf16_slovak_ci = 114,
-    utf16_spanish2_ci = 115,
-    utf16_roman_ci = 116,
-    utf16_persian_ci = 117,
-    utf16_esperanto_ci = 118,
-    utf16_hungarian_ci = 119,
-    utf16_sinhala_ci = 120,
-    utf16_german2_ci = 121,
-    utf16_croatian_ci = 122,
-    utf16_unicode_520_ci = 123,
-    utf16_vietnamese_ci = 124,
-    ucs2_unicode_ci = 128,
-    ucs2_icelandic_ci = 129,
-    ucs2_latvian_ci = 130,
-    ucs2_romanian_ci = 131,
-    ucs2_slovenian_ci = 132,
-    ucs2_polish_ci = 133,
-    ucs2_estonian_ci = 134,
-    ucs2_spanish_ci = 135,
-    ucs2_swedish_ci = 136,
-    ucs2_turkish_ci = 137,
-    ucs2_czech_ci = 138,
-    ucs2_danish_ci = 139,
-    ucs2_lithuanian_ci = 140,
-    ucs2_slovak_ci = 141,
-    ucs2_spanish2_ci = 142,
-    ucs2_roman_ci = 143,
-    ucs2_persian_ci = 144,
-    ucs2_esperanto_ci = 145,
-    ucs2_hungarian_ci = 146,
-    ucs2_sinhala_ci = 147,
-    ucs2_german2_ci = 148,
-    ucs2_croatian_ci = 149,
-    ucs2_unicode_520_ci = 150,
-    ucs2_vietnamese_ci = 151,
-    ucs2_general_mysql500_ci = 159,
-    utf32_unicode_ci = 160,
-    utf32_icelandic_ci = 161,
-    utf32_latvian_ci = 162,
-    utf32_romanian_ci = 163,
-    utf32_slovenian_ci = 164,
-    utf32_polish_ci = 165,
-    utf32_estonian_ci = 166,
-    utf32_spanish_ci = 167,
-    utf32_swedish_ci = 168,
-    utf32_turkish_ci = 169,
-    utf32_czech_ci = 170,
-    utf32_danish_ci = 171,
-    utf32_lithuanian_ci = 172,
-    utf32_slovak_ci = 173,
-    utf32_spanish2_ci = 174,
-    utf32_roman_ci = 175,
-    utf32_persian_ci = 176,
-    utf32_esperanto_ci = 177,
-    utf32_hungarian_ci = 178,
-    utf32_sinhala_ci = 179,
-    utf32_german2_ci = 180,
-    utf32_croatian_ci = 181,
-    utf32_unicode_520_ci = 182,
-    utf32_vietnamese_ci = 183,
-    utf8_unicode_ci = 192,
-    utf8_icelandic_ci = 193,
-    utf8_latvian_ci = 194,
-    utf8_romanian_ci = 195,
-    utf8_slovenian_ci = 196,
-    utf8_polish_ci = 197,
-    utf8_estonian_ci = 198,
-    utf8_spanish_ci = 199,
-    utf8_swedish_ci = 200,
-    utf8_turkish_ci = 201,
-    utf8_czech_ci = 202,
-    utf8_danish_ci = 203,
-    utf8_lithuanian_ci = 204,
-    utf8_slovak_ci = 205,
-    utf8_spanish2_ci = 206,
-    utf8_roman_ci = 207,
-    utf8_persian_ci = 208,
-    utf8_esperanto_ci = 209,
-    utf8_hungarian_ci = 210,
-    utf8_sinhala_ci = 211,
-    utf8_german2_ci = 212,
-    utf8_croatian_ci = 213,
-    utf8_unicode_520_ci = 214,
-    utf8_vietnamese_ci = 215,
-    utf8_general_mysql500_ci = 223,
-    utf8mb4_unicode_ci = 224,
-    utf8mb4_icelandic_ci = 225,
-    utf8mb4_latvian_ci = 226,
-    utf8mb4_romanian_ci = 227,
-    utf8mb4_slovenian_ci = 228,
-    utf8mb4_polish_ci = 229,
-    utf8mb4_estonian_ci = 230,
-    utf8mb4_spanish_ci = 231,
-    utf8mb4_swedish_ci = 232,
-    utf8mb4_turkish_ci = 233,
-    utf8mb4_czech_ci = 234,
-    utf8mb4_danish_ci = 235,
-    utf8mb4_lithuanian_ci = 236,
-    utf8mb4_slovak_ci = 237,
-    utf8mb4_spanish2_ci = 238,
-    utf8mb4_roman_ci = 239,
-    utf8mb4_persian_ci = 240,
-    utf8mb4_esperanto_ci = 241,
-    utf8mb4_hungarian_ci = 242,
-    utf8mb4_sinhala_ci = 243,
-    utf8mb4_german2_ci = 244,
-    utf8mb4_croatian_ci = 245,
-    utf8mb4_unicode_520_ci = 246,
-    utf8mb4_vietnamese_ci = 247,
+enum MysqlCollation : uint16_t {
+    MYSQL_big5_chinese_ci = 1,
+    MYSQL_latin2_czech_cs = 2,
+    MYSQL_dec8_swedish_ci = 3,
+    MYSQL_cp850_general_ci = 4,
+    MYSQL_latin1_german1_ci = 5,
+    MYSQL_hp8_english_ci = 6,
+    MYSQL_koi8r_general_ci = 7,
+    MYSQL_latin1_swedish_ci = 8,
+    MYSQL_latin2_general_ci = 9,
+    MYSQL_swe7_swedish_ci = 10,
+    MYSQL_ascii_general_ci = 11,
+    MYSQL_ujis_japanese_ci = 12,
+    MYSQL_sjis_japanese_ci = 13,
+    MYSQL_cp1251_bulgarian_ci = 14,
+    MYSQL_latin1_danish_ci = 15,
+    MYSQL_hebrew_general_ci = 16,
+    MYSQL_tis620_thai_ci = 18,
+    MYSQL_euckr_korean_ci = 19,
+    MYSQL_latin7_estonian_cs = 20,
+    MYSQL_latin2_hungarian_ci = 21,
+    MYSQL_koi8u_general_ci = 22,
+    MYSQL_cp1251_ukrainian_ci = 23,
+    MYSQL_gb2312_chinese_ci = 24,
+    MYSQL_greek_general_ci = 25,
+    MYSQL_cp1250_general_ci = 26,
+    MYSQL_latin2_croatian_ci = 27,
+    MYSQL_gbk_chinese_ci = 28,
+    MYSQL_cp1257_lithuanian_ci = 29,
+    MYSQL_latin5_turkish_ci = 30,
+    MYSQL_latin1_german2_ci = 31,
+    MYSQL_armscii8_general_ci = 32,
+    MYSQL_utf8_general_ci = 33,
+    MYSQL_cp1250_czech_cs = 34,
+    MYSQL_ucs2_general_ci = 35,
+    MYSQL_cp866_general_ci = 36,
+    MYSQL_keybcs2_general_ci = 37,
+    MYSQL_macce_general_ci = 38,
+    MYSQL_macroman_general_ci = 39,
+    MYSQL_cp852_general_ci = 40,
+    MYSQL_latin7_general_ci = 41,
+    MYSQL_latin7_general_cs = 42,
+    MYSQL_macce_bin = 43,
+    MYSQL_cp1250_croatian_ci = 44,
+    MYSQL_utf8mb4_general_ci = 45,
+    MYSQL_utf8mb4_bin = 46,
+    MYSQL_latin1_bin = 47,
+    MYSQL_latin1_general_ci = 48,
+    MYSQL_latin1_general_cs = 49,
+    MYSQL_cp1251_bin = 50,
+    MYSQL_cp1251_general_ci = 51,
+    MYSQL_cp1251_general_cs = 52,
+    MYSQL_macroman_bin = 53,
+    MYSQL_utf16_general_ci = 54,
+    MYSQL_utf16_bin = 55,
+    MYSQL_utf16le_general_ci = 56,
+    MYSQL_cp1256_general_ci = 57,
+    MYSQL_cp1257_bin = 58,
+    MYSQL_cp1257_general_ci = 59,
+    MYSQL_utf32_general_ci = 60,
+    MYSQL_utf32_bin = 61,
+    MYSQL_utf16le_bin = 62,
+    MYSQL_binary = 63,
+    MYSQL_armscii8_bin = 64,
+    MYSQL_ascii_bin = 65,
+    MYSQL_cp1250_bin = 66,
+    MYSQL_cp1256_bin = 67,
+    MYSQL_cp866_bin = 68,
+    MYSQL_dec8_bin = 69,
+    MYSQL_greek_bin = 70,
+    MYSQL_hebrew_bin = 71,
+    MYSQL_hp8_bin = 72,
+    MYSQL_keybcs2_bin = 73,
+    MYSQL_koi8r_bin = 74,
+    MYSQL_koi8u_bin = 75,
+    MYSQL_latin2_bin = 77,
+    MYSQL_latin5_bin = 78,
+    MYSQL_latin7_bin = 79,
+    MYSQL_cp850_bin = 80,
+    MYSQL_cp852_bin = 81,
+    MYSQL_swe7_bin = 82,
+    MYSQL_utf8_bin = 83,
+    MYSQL_big5_bin = 84,
+    MYSQL_euckr_bin = 85,
+    MYSQL_gb2312_bin = 86,
+    MYSQL_gbk_bin = 87,
+    MYSQL_sjis_bin = 88,
+    MYSQL_tis620_bin = 89,
+    MYSQL_ucs2_bin = 90,
+    MYSQL_ujis_bin = 91,
+    MYSQL_geostd8_general_ci = 92,
+    MYSQL_geostd8_bin = 93,
+    MYSQL_latin1_spanish_ci = 94,
+    MYSQL_cp932_japanese_ci = 95,
+    MYSQL_cp932_bin = 96,
+    MYSQL_eucjpms_japanese_ci = 97,
+    MYSQL_eucjpms_bin = 98,
+    MYSQL_cp1250_polish_ci = 99,
+    MYSQL_utf16_unicode_ci = 101,
+    MYSQL_utf16_icelandic_ci = 102,
+    MYSQL_utf16_latvian_ci = 103,
+    MYSQL_utf16_romanian_ci = 104,
+    MYSQL_utf16_slovenian_ci = 105,
+    MYSQL_utf16_polish_ci = 106,
+    MYSQL_utf16_estonian_ci = 107,
+    MYSQL_utf16_spanish_ci = 108,
+    MYSQL_utf16_swedish_ci = 109,
+    MYSQL_utf16_turkish_ci = 110,
+    MYSQL_utf16_czech_ci = 111,
+    MYSQL_utf16_danish_ci = 112,
+    MYSQL_utf16_lithuanian_ci = 113,
+    MYSQL_utf16_slovak_ci = 114,
+    MYSQL_utf16_spanish2_ci = 115,
+    MYSQL_utf16_roman_ci = 116,
+    MYSQL_utf16_persian_ci = 117,
+    MYSQL_utf16_esperanto_ci = 118,
+    MYSQL_utf16_hungarian_ci = 119,
+    MYSQL_utf16_sinhala_ci = 120,
+    MYSQL_utf16_german2_ci = 121,
+    MYSQL_utf16_croatian_ci = 122,
+    MYSQL_utf16_unicode_520_ci = 123,
+    MYSQL_utf16_vietnamese_ci = 124,
+    MYSQL_ucs2_unicode_ci = 128,
+    MYSQL_ucs2_icelandic_ci = 129,
+    MYSQL_ucs2_latvian_ci = 130,
+    MYSQL_ucs2_romanian_ci = 131,
+    MYSQL_ucs2_slovenian_ci = 132,
+    MYSQL_ucs2_polish_ci = 133,
+    MYSQL_ucs2_estonian_ci = 134,
+    MYSQL_ucs2_spanish_ci = 135,
+    MYSQL_ucs2_swedish_ci = 136,
+    MYSQL_ucs2_turkish_ci = 137,
+    MYSQL_ucs2_czech_ci = 138,
+    MYSQL_ucs2_danish_ci = 139,
+    MYSQL_ucs2_lithuanian_ci = 140,
+    MYSQL_ucs2_slovak_ci = 141,
+    MYSQL_ucs2_spanish2_ci = 142,
+    MYSQL_ucs2_roman_ci = 143,
+    MYSQL_ucs2_persian_ci = 144,
+    MYSQL_ucs2_esperanto_ci = 145,
+    MYSQL_ucs2_hungarian_ci = 146,
+    MYSQL_ucs2_sinhala_ci = 147,
+    MYSQL_ucs2_german2_ci = 148,
+    MYSQL_ucs2_croatian_ci = 149,
+    MYSQL_ucs2_unicode_520_ci = 150,
+    MYSQL_ucs2_vietnamese_ci = 151,
+    MYSQL_ucs2_general_mysql500_ci = 159,
+    MYSQL_utf32_unicode_ci = 160,
+    MYSQL_utf32_icelandic_ci = 161,
+    MYSQL_utf32_latvian_ci = 162,
+    MYSQL_utf32_romanian_ci = 163,
+    MYSQL_utf32_slovenian_ci = 164,
+    MYSQL_utf32_polish_ci = 165,
+    MYSQL_utf32_estonian_ci = 166,
+    MYSQL_utf32_spanish_ci = 167,
+    MYSQL_utf32_swedish_ci = 168,
+    MYSQL_utf32_turkish_ci = 169,
+    MYSQL_utf32_czech_ci = 170,
+    MYSQL_utf32_danish_ci = 171,
+    MYSQL_utf32_lithuanian_ci = 172,
+    MYSQL_utf32_slovak_ci = 173,
+    MYSQL_utf32_spanish2_ci = 174,
+    MYSQL_utf32_roman_ci = 175,
+    MYSQL_utf32_persian_ci = 176,
+    MYSQL_utf32_esperanto_ci = 177,
+    MYSQL_utf32_hungarian_ci = 178,
+    MYSQL_utf32_sinhala_ci = 179,
+    MYSQL_utf32_german2_ci = 180,
+    MYSQL_utf32_croatian_ci = 181,
+    MYSQL_utf32_unicode_520_ci = 182,
+    MYSQL_utf32_vietnamese_ci = 183,
+    MYSQL_utf8_unicode_ci = 192,
+    MYSQL_utf8_icelandic_ci = 193,
+    MYSQL_utf8_latvian_ci = 194,
+    MYSQL_utf8_romanian_ci = 195,
+    MYSQL_utf8_slovenian_ci = 196,
+    MYSQL_utf8_polish_ci = 197,
+    MYSQL_utf8_estonian_ci = 198,
+    MYSQL_utf8_spanish_ci = 199,
+    MYSQL_utf8_swedish_ci = 200,
+    MYSQL_utf8_turkish_ci = 201,
+    MYSQL_utf8_czech_ci = 202,
+    MYSQL_utf8_danish_ci = 203,
+    MYSQL_utf8_lithuanian_ci = 204,
+    MYSQL_utf8_slovak_ci = 205,
+    MYSQL_utf8_spanish2_ci = 206,
+    MYSQL_utf8_roman_ci = 207,
+    MYSQL_utf8_persian_ci = 208,
+    MYSQL_utf8_esperanto_ci = 209,
+    MYSQL_utf8_hungarian_ci = 210,
+    MYSQL_utf8_sinhala_ci = 211,
+    MYSQL_utf8_german2_ci = 212,
+    MYSQL_utf8_croatian_ci = 213,
+    MYSQL_utf8_unicode_520_ci = 214,
+    MYSQL_utf8_vietnamese_ci = 215,
+    MYSQL_utf8_general_mysql500_ci = 223,
+    MYSQL_utf8mb4_unicode_ci = 224,
+    MYSQL_utf8mb4_icelandic_ci = 225,
+    MYSQL_utf8mb4_latvian_ci = 226,
+    MYSQL_utf8mb4_romanian_ci = 227,
+    MYSQL_utf8mb4_slovenian_ci = 228,
+    MYSQL_utf8mb4_polish_ci = 229,
+    MYSQL_utf8mb4_estonian_ci = 230,
+    MYSQL_utf8mb4_spanish_ci = 231,
+    MYSQL_utf8mb4_swedish_ci = 232,
+    MYSQL_utf8mb4_turkish_ci = 233,
+    MYSQL_utf8mb4_czech_ci = 234,
+    MYSQL_utf8mb4_danish_ci = 235,
+    MYSQL_utf8mb4_lithuanian_ci = 236,
+    MYSQL_utf8mb4_slovak_ci = 237,
+    MYSQL_utf8mb4_spanish2_ci = 238,
+    MYSQL_utf8mb4_roman_ci = 239,
+    MYSQL_utf8mb4_persian_ci = 240,
+    MYSQL_utf8mb4_esperanto_ci = 241,
+    MYSQL_utf8mb4_hungarian_ci = 242,
+    MYSQL_utf8mb4_sinhala_ci = 243,
+    MYSQL_utf8mb4_german2_ci = 244,
+    MYSQL_utf8mb4_croatian_ci = 245,
+    MYSQL_utf8mb4_unicode_520_ci = 246,
+    MYSQL_utf8mb4_vietnamese_ci = 247,
 };
 
 const char* MysqlFieldTypeToString(MysqlFieldType);
@@ -502,7 +501,7 @@ public:
     class Row {
     public:
         uint64_t field_number() const;
-        const Field* field(const uint64_t index) const;
+        const Field& field(const uint64_t index) const;
 
     private:
         bool parseTextRow(butil::IOBuf& buf);
@@ -650,7 +649,7 @@ private:
         const Ok* ok;
         const Error* error;
         const Eof* eof;
-        const void* padding;  // For swapping
+        uint64_t padding;  // For swapping, must cover all bytes.
     } _data;
 
     DISALLOW_COPY_AND_ASSIGN(MysqlReply);
@@ -658,8 +657,8 @@ private:
 
 // mysql reply
 inline MysqlReply::MysqlReply() {
-    _type = RSP_UNKNOWN;
-    _data.padding = NULL;
+    _type = MYSQL_RSP_UNKNOWN;
+    _data.padding = 0;
 }
 inline void MysqlReply::Swap(MysqlReply& other) {
     std::swap(_type, other._type);
@@ -701,19 +700,19 @@ inline const MysqlReply::Eof* MysqlReply::eof() const {
     return NULL;
 }
 inline bool MysqlReply::is_auth() const {
-    return _type == RSP_AUTH;
+    return _type == MYSQL_RSP_AUTH;
 }
 inline bool MysqlReply::is_ok() const {
-    return _type == RSP_OK;
+    return _type == MYSQL_RSP_OK;
 }
 inline bool MysqlReply::is_error() const {
-    return _type == RSP_ERROR;
+    return _type == MYSQL_RSP_ERROR;
 }
 inline bool MysqlReply::is_eof() const {
-    return _type == RSP_EOF;
+    return _type == MYSQL_RSP_EOF;
 }
 inline bool MysqlReply::is_resultset() const {
-    return _type == RSP_RESULTSET;
+    return _type == MYSQL_RSP_RESULTSET;
 }
 inline uint64_t MysqlReply::column_number() const {
     if (is_resultset()) {
@@ -888,12 +887,13 @@ inline void MysqlReply::Column::set_parsed() {
 inline uint64_t MysqlReply::Row::field_number() const {
     return _field_number;
 }
-inline const MysqlReply::Field* MysqlReply::Row::field(const uint64_t index) const {
+inline const MysqlReply::Field& MysqlReply::Row::field(const uint64_t index) const {
     if (index > _field_number) {
         LOG(ERROR) << "wrong index, must between [0, " << _field_number << ")";
-        return NULL;
+        static Field field_nil;
+        return field_nil;
     }
-    return _fields + index;
+    return _fields[index];
 }
 inline bool MysqlReply::Row::is_parsed() const {
     return _is_parsed;
@@ -902,6 +902,13 @@ inline void MysqlReply::Row::set_parsed() {
     _is_parsed = true;
 }
 // mysql reply field
+// inline MysqlReply::Field::Field() {
+//     _data.padding[0] = 0;
+//     _data.padding[1] = 0;
+//     _type = MYSQL_FIELD_TYPE_NULL;
+//     _is_null = true;
+//     _is_parsed = false;
+// }
 inline int8_t MysqlReply::Field::stiny() const {
     if (is_stiny()) {
         return _data.stiny;
@@ -913,7 +920,7 @@ inline uint8_t MysqlReply::Field::tiny() const {
     if (is_tiny()) {
         return _data.tiny;
     }
-    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an tiny";
+    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type) << ", not an tiny";
     return 0;
 }
 inline int16_t MysqlReply::Field::ssmall() const {
@@ -927,7 +934,7 @@ inline uint16_t MysqlReply::Field::small() const {
     if (is_small()) {
         return _data.small;
     }
-    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an small";
+    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type) << ", not an small";
     return 0;
 }
 inline int32_t MysqlReply::Field::sinteger() const {
@@ -941,7 +948,7 @@ inline uint32_t MysqlReply::Field::integer() const {
     if (is_integer()) {
         return _data.integer;
     }
-    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an integer";
+    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type) << ", not an integer";
     return 0;
 }
 inline int64_t MysqlReply::Field::sbigint() const {
@@ -955,7 +962,7 @@ inline uint64_t MysqlReply::Field::bigint() const {
     if (is_bigint()) {
         return _data.bigint;
     }
-    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an bigint";
+    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type) << ", not an bigint";
     return 0;
 }
 inline float MysqlReply::Field::float32() const {
@@ -980,44 +987,46 @@ inline butil::StringPiece MysqlReply::Field::string() const {
     return butil::StringPiece();
 }
 inline bool MysqlReply::Field::is_stiny() const {
-    return _type == FIELD_TYPE_TINY && !_is_unsigned;
+    return _type == MYSQL_FIELD_TYPE_TINY && !_is_unsigned;
 }
 inline bool MysqlReply::Field::is_tiny() const {
-    return _type == FIELD_TYPE_TINY && _is_unsigned;
+    return _type == MYSQL_FIELD_TYPE_TINY && _is_unsigned;
 }
 inline bool MysqlReply::Field::is_ssmall() const {
-    return (_type == FIELD_TYPE_SHORT || _type == FIELD_TYPE_YEAR) && !_is_unsigned;
+    return (_type == MYSQL_FIELD_TYPE_SHORT || _type == MYSQL_FIELD_TYPE_YEAR) && !_is_unsigned;
 }
 inline bool MysqlReply::Field::is_small() const {
-    return (_type == FIELD_TYPE_SHORT || _type == FIELD_TYPE_YEAR) && _is_unsigned;
+    return (_type == MYSQL_FIELD_TYPE_SHORT || _type == MYSQL_FIELD_TYPE_YEAR) && _is_unsigned;
 }
 inline bool MysqlReply::Field::is_sinteger() const {
-    return (_type == FIELD_TYPE_INT24 || _type == FIELD_TYPE_LONG) && !_is_unsigned;
+    return (_type == MYSQL_FIELD_TYPE_INT24 || _type == MYSQL_FIELD_TYPE_LONG) && !_is_unsigned;
 }
 inline bool MysqlReply::Field::is_integer() const {
-    return (_type == FIELD_TYPE_INT24 || _type == FIELD_TYPE_LONG) && _is_unsigned;
+    return (_type == MYSQL_FIELD_TYPE_INT24 || _type == MYSQL_FIELD_TYPE_LONG) && _is_unsigned;
 }
 inline bool MysqlReply::Field::is_sbigint() const {
-    return _type == FIELD_TYPE_LONGLONG && !_is_unsigned;
+    return _type == MYSQL_FIELD_TYPE_LONGLONG && !_is_unsigned;
 }
 inline bool MysqlReply::Field::is_bigint() const {
-    return _type == FIELD_TYPE_LONGLONG && _is_unsigned;
+    return _type == MYSQL_FIELD_TYPE_LONGLONG && _is_unsigned;
 }
 inline bool MysqlReply::Field::is_float32() const {
-    return _type == FIELD_TYPE_FLOAT;
+    return _type == MYSQL_FIELD_TYPE_FLOAT;
 }
 inline bool MysqlReply::Field::is_float64() const {
-    return _type == FIELD_TYPE_DOUBLE;
+    return _type == MYSQL_FIELD_TYPE_DOUBLE;
 }
 inline bool MysqlReply::Field::is_string() const {
-    return _type == FIELD_TYPE_DECIMAL || _type == FIELD_TYPE_NEWDECIMAL ||
-        _type == FIELD_TYPE_VARCHAR || _type == FIELD_TYPE_BIT || _type == FIELD_TYPE_ENUM ||
-        _type == FIELD_TYPE_SET || _type == FIELD_TYPE_TINY_BLOB ||
-        _type == FIELD_TYPE_MEDIUM_BLOB || _type == FIELD_TYPE_LONG_BLOB ||
-        _type == FIELD_TYPE_BLOB || _type == FIELD_TYPE_VAR_STRING || _type == FIELD_TYPE_STRING ||
-        _type == FIELD_TYPE_GEOMETRY || _type == FIELD_TYPE_JSON || _type == FIELD_TYPE_TIME ||
-        _type == FIELD_TYPE_DATE || _type == FIELD_TYPE_NEWDATE || _type == FIELD_TYPE_TIMESTAMP ||
-        _type == FIELD_TYPE_DATETIME;
+    return _type == MYSQL_FIELD_TYPE_DECIMAL || _type == MYSQL_FIELD_TYPE_NEWDECIMAL ||
+        _type == MYSQL_FIELD_TYPE_VARCHAR || _type == MYSQL_FIELD_TYPE_BIT ||
+        _type == MYSQL_FIELD_TYPE_ENUM || _type == MYSQL_FIELD_TYPE_SET ||
+        _type == MYSQL_FIELD_TYPE_TINY_BLOB || _type == MYSQL_FIELD_TYPE_MEDIUM_BLOB ||
+        _type == MYSQL_FIELD_TYPE_LONG_BLOB || _type == MYSQL_FIELD_TYPE_BLOB ||
+        _type == MYSQL_FIELD_TYPE_VAR_STRING || _type == MYSQL_FIELD_TYPE_STRING ||
+        _type == MYSQL_FIELD_TYPE_GEOMETRY || _type == MYSQL_FIELD_TYPE_JSON ||
+        _type == MYSQL_FIELD_TYPE_TIME || _type == MYSQL_FIELD_TYPE_DATE ||
+        _type == MYSQL_FIELD_TYPE_NEWDATE || _type == MYSQL_FIELD_TYPE_TIMESTAMP ||
+        _type == MYSQL_FIELD_TYPE_DATETIME;
 }
 inline bool MysqlReply::Field::is_null() const {
     return _is_null;

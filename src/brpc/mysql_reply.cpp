@@ -30,60 +30,60 @@ inline bool my_alloc_check(butil::Arena* arena, const size_t n, Type*& pointer) 
 
 const char* MysqlFieldTypeToString(MysqlFieldType type) {
     switch (type) {
-        case FIELD_TYPE_DECIMAL:
-        case FIELD_TYPE_TINY:
+        case MYSQL_FIELD_TYPE_DECIMAL:
+        case MYSQL_FIELD_TYPE_TINY:
             return "tiny";
-        case FIELD_TYPE_SHORT:
+        case MYSQL_FIELD_TYPE_SHORT:
             return "short";
-        case FIELD_TYPE_LONG:
+        case MYSQL_FIELD_TYPE_LONG:
             return "long";
-        case FIELD_TYPE_FLOAT:
+        case MYSQL_FIELD_TYPE_FLOAT:
             return "float";
-        case FIELD_TYPE_DOUBLE:
+        case MYSQL_FIELD_TYPE_DOUBLE:
             return "double";
-        case FIELD_TYPE_NULL:
+        case MYSQL_FIELD_TYPE_NULL:
             return "null";
-        case FIELD_TYPE_TIMESTAMP:
+        case MYSQL_FIELD_TYPE_TIMESTAMP:
             return "timestamp";
-        case FIELD_TYPE_LONGLONG:
+        case MYSQL_FIELD_TYPE_LONGLONG:
             return "longlong";
-        case FIELD_TYPE_INT24:
+        case MYSQL_FIELD_TYPE_INT24:
             return "int24";
-        case FIELD_TYPE_DATE:
+        case MYSQL_FIELD_TYPE_DATE:
             return "date";
-        case FIELD_TYPE_TIME:
+        case MYSQL_FIELD_TYPE_TIME:
             return "time";
-        case FIELD_TYPE_DATETIME:
+        case MYSQL_FIELD_TYPE_DATETIME:
             return "datetime";
-        case FIELD_TYPE_YEAR:
+        case MYSQL_FIELD_TYPE_YEAR:
             return "year";
-        case FIELD_TYPE_NEWDATE:
+        case MYSQL_FIELD_TYPE_NEWDATE:
             return "new date";
-        case FIELD_TYPE_VARCHAR:
+        case MYSQL_FIELD_TYPE_VARCHAR:
             return "varchar";
-        case FIELD_TYPE_BIT:
+        case MYSQL_FIELD_TYPE_BIT:
             return "bit";
-        case FIELD_TYPE_JSON:
+        case MYSQL_FIELD_TYPE_JSON:
             return "json";
-        case FIELD_TYPE_NEWDECIMAL:
+        case MYSQL_FIELD_TYPE_NEWDECIMAL:
             return "new decimal";
-        case FIELD_TYPE_ENUM:
+        case MYSQL_FIELD_TYPE_ENUM:
             return "enum";
-        case FIELD_TYPE_SET:
+        case MYSQL_FIELD_TYPE_SET:
             return "set";
-        case FIELD_TYPE_TINY_BLOB:
+        case MYSQL_FIELD_TYPE_TINY_BLOB:
             return "tiny blob";
-        case FIELD_TYPE_MEDIUM_BLOB:
+        case MYSQL_FIELD_TYPE_MEDIUM_BLOB:
             return "blob";
-        case FIELD_TYPE_LONG_BLOB:
+        case MYSQL_FIELD_TYPE_LONG_BLOB:
             return "long blob";
-        case FIELD_TYPE_BLOB:
+        case MYSQL_FIELD_TYPE_BLOB:
             return "blob";
-        case FIELD_TYPE_VAR_STRING:
+        case MYSQL_FIELD_TYPE_VAR_STRING:
             return "var string";
-        case FIELD_TYPE_STRING:
+        case MYSQL_FIELD_TYPE_STRING:
             return "string";
-        case FIELD_TYPE_GEOMETRY:
+        case MYSQL_FIELD_TYPE_GEOMETRY:
             return "geometry";
         default:
             return "Unknown Field Type";
@@ -92,15 +92,15 @@ const char* MysqlFieldTypeToString(MysqlFieldType type) {
 
 const char* MysqlRspTypeToString(MysqlRspType type) {
     switch (type) {
-        case RSP_OK:
+        case MYSQL_RSP_OK:
             return "ok";
-        case RSP_ERROR:
+        case MYSQL_RSP_ERROR:
             return "error";
-        case RSP_RESULTSET:
+        case MYSQL_RSP_RESULTSET:
             return "resultset";
-        case RSP_EOF:
+        case MYSQL_RSP_EOF:
             return "eof";
-        case RSP_AUTH:
+        case MYSQL_RSP_AUTH:
             return "auth";
         default:
             return "Unknown Response Type";
@@ -167,9 +167,9 @@ bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf,
     if (p == NULL) {
         return false;
     }
-    uint8_t type = _type == RSP_UNKNOWN ? p[4] : (uint8_t)_type;
+    uint8_t type = _type == MYSQL_RSP_UNKNOWN ? p[4] : (uint8_t)_type;
     if (is_auth && type != 0x00 && type != 0xFF) {
-        _type = RSP_AUTH;
+        _type = MYSQL_RSP_AUTH;
         Auth* auth = NULL;
         MY_ALLOC_CHECK(my_alloc_check(arena, 1, auth));
         MY_PARSE_CHECK(auth->parseAuth(buf, arena));
@@ -177,27 +177,27 @@ bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf,
         return true;
     }
     if (type == 0x00) {
-        _type = RSP_OK;
+        _type = MYSQL_RSP_OK;
         Ok* ok = NULL;
         MY_ALLOC_CHECK(my_alloc_check(arena, 1, ok));
         MY_PARSE_CHECK(ok->parseOk(buf, arena));
         _data.ok = ok;
-        *is_multi = _data.ok->status() & SERVER_MORE_RESULTS_EXISTS;
+        *is_multi = _data.ok->status() & MYSQL_SERVER_MORE_RESULTS_EXISTS;
     } else if (type == 0xFF) {
-        _type = RSP_ERROR;
+        _type = MYSQL_RSP_ERROR;
         Error* error = NULL;
         MY_ALLOC_CHECK(my_alloc_check(arena, 1, error));
         MY_PARSE_CHECK(error->parseError(buf, arena));
         _data.error = error;
     } else if (type == 0xFE) {
-        _type = RSP_EOF;
+        _type = MYSQL_RSP_EOF;
         Eof* eof = NULL;
         MY_ALLOC_CHECK(my_alloc_check(arena, 1, eof));
         MY_PARSE_CHECK(eof->parseEof(buf));
         _data.eof = eof;
-        *is_multi = _data.eof->status() & SERVER_MORE_RESULTS_EXISTS;
+        *is_multi = _data.eof->status() & MYSQL_SERVER_MORE_RESULTS_EXISTS;
     } else if (type >= 0x01 && type <= 0xFA) {
-        _type = RSP_RESULTSET;
+        _type = MYSQL_RSP_RESULTSET;
         MY_ALLOC_CHECK(my_alloc_check(arena, 1, _data.result_set.var));
         ResultSet& r = *_data.result_set.var;
         // parse header
@@ -252,7 +252,7 @@ bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf,
         }
         // parse eof2
         MY_PARSE_CHECK(r._eof2.parseEof(buf));
-        *is_multi = r._eof2.status() & SERVER_MORE_RESULTS_EXISTS;
+        *is_multi = r._eof2.status() & MYSQL_SERVER_MORE_RESULTS_EXISTS;
     } else {
         LOG(ERROR) << "Unknown Response Type";
         return false;
@@ -261,7 +261,7 @@ bool MysqlReply::ConsumePartialIOBuf(butil::IOBuf& buf,
 }
 
 void MysqlReply::Print(std::ostream& os) const {
-    if (_type == RSP_AUTH) {
+    if (_type == MYSQL_RSP_AUTH) {
         const Auth& auth = *_data.auth;
         os << "\nprotocol:" << (unsigned)auth._protocol << "\nversion:" << auth._version.as_string()
            << "\nthread_id:" << auth._thread_id << "\nsalt:" << auth._salt.as_string()
@@ -270,16 +270,16 @@ void MysqlReply::Print(std::ostream& os) const {
            << "\nauth_plugin_length:" << auth._auth_plugin_length
            << "\nsalt2:" << auth._salt2.as_string()
            << "\nauth_plugin:" << auth._auth_plugin.as_string();
-    } else if (_type == RSP_OK) {
+    } else if (_type == MYSQL_RSP_OK) {
         const Ok& ok = *_data.ok;
         os << "\naffect_row:" << ok._affect_row << "\nindex:" << ok._index
            << "\nstatus:" << ok._status << "\nwarning:" << ok._warning
            << "\nmessage:" << ok._msg.as_string();
-    } else if (_type == RSP_ERROR) {
+    } else if (_type == MYSQL_RSP_ERROR) {
         const Error& err = *_data.error;
         os << "\nerrcode:" << err._errcode << "\nstatus:" << err._status.as_string()
            << "\nmessage:" << err._msg.as_string();
-    } else if (_type == RSP_RESULTSET) {
+    } else if (_type == MYSQL_RSP_RESULTSET) {
         const ResultSet& r = *_data.result_set.const_var;
         os << "\nheader.column_number:" << r._header._column_number;
         for (uint64_t i = 0; i < r._header._column_number; ++i) {
@@ -302,61 +302,61 @@ void MysqlReply::Print(std::ostream& os) const {
             os << "\nrow(" << n++ << "):";
             for (uint64_t j = 0; j < r._header._column_number; ++j) {
                 switch (r._columns[j]._type) {
-                    case FIELD_TYPE_TINY:
-                        if (r._columns[j]._flag & UNSIGNED_FLAG) {
+                    case MYSQL_FIELD_TYPE_TINY:
+                        if (r._columns[j]._flag & MYSQL_UNSIGNED_FLAG) {
                             os << row->field(j)->tiny();
                         } else {
                             os << row->field(j)->stiny();
                         }
                         break;
-                    case FIELD_TYPE_SHORT:
-                    case FIELD_TYPE_YEAR:
-                        if (r._columns[j]._flag & UNSIGNED_FLAG) {
+                    case MYSQL_FIELD_TYPE_SHORT:
+                    case MYSQL_FIELD_TYPE_YEAR:
+                        if (r._columns[j]._flag & MYSQL_UNSIGNED_FLAG) {
                             os << row->field(j)->small();
                         } else {
                             os << row->field(j)->ssmall();
                         }
                         break;
-                    case FIELD_TYPE_INT24:
-                    case FIELD_TYPE_LONG:
-                        if (r._columns[j]._flag & UNSIGNED_FLAG) {
+                    case MYSQL_FIELD_TYPE_INT24:
+                    case MYSQL_FIELD_TYPE_LONG:
+                        if (r._columns[j]._flag & MYSQL_UNSIGNED_FLAG) {
                             os << row->field(j)->integer();
                         } else {
                             os << row->field(j)->sinteger();
                         }
                         break;
-                    case FIELD_TYPE_LONGLONG:
-                        if (r._columns[j]._flag & UNSIGNED_FLAG) {
+                    case MYSQL_FIELD_TYPE_LONGLONG:
+                        if (r._columns[j]._flag & MYSQL_UNSIGNED_FLAG) {
                             os << row->field(j)->bigint();
                         } else {
                             os << row->field(j)->sbigint();
                         }
                         break;
-                    case FIELD_TYPE_FLOAT:
+                    case MYSQL_FIELD_TYPE_FLOAT:
                         os << row->field(j)->float32();
                         break;
-                    case FIELD_TYPE_DOUBLE:
+                    case MYSQL_FIELD_TYPE_DOUBLE:
                         os << row->field(j)->float64();
                         break;
-                    case FIELD_TYPE_DECIMAL:
-                    case FIELD_TYPE_NEWDECIMAL:
-                    case FIELD_TYPE_VARCHAR:
-                    case FIELD_TYPE_BIT:
-                    case FIELD_TYPE_ENUM:
-                    case FIELD_TYPE_SET:
-                    case FIELD_TYPE_TINY_BLOB:
-                    case FIELD_TYPE_MEDIUM_BLOB:
-                    case FIELD_TYPE_LONG_BLOB:
-                    case FIELD_TYPE_BLOB:
-                    case FIELD_TYPE_VAR_STRING:
-                    case FIELD_TYPE_STRING:
-                    case FIELD_TYPE_GEOMETRY:
-                    case FIELD_TYPE_JSON:
-                    case FIELD_TYPE_TIME:
-                    case FIELD_TYPE_DATE:
-                    case FIELD_TYPE_NEWDATE:
-                    case FIELD_TYPE_TIMESTAMP:
-                    case FIELD_TYPE_DATETIME:
+                    case MYSQL_FIELD_TYPE_DECIMAL:
+                    case MYSQL_FIELD_TYPE_NEWDECIMAL:
+                    case MYSQL_FIELD_TYPE_VARCHAR:
+                    case MYSQL_FIELD_TYPE_BIT:
+                    case MYSQL_FIELD_TYPE_ENUM:
+                    case MYSQL_FIELD_TYPE_SET:
+                    case MYSQL_FIELD_TYPE_TINY_BLOB:
+                    case MYSQL_FIELD_TYPE_MEDIUM_BLOB:
+                    case MYSQL_FIELD_TYPE_LONG_BLOB:
+                    case MYSQL_FIELD_TYPE_BLOB:
+                    case MYSQL_FIELD_TYPE_VAR_STRING:
+                    case MYSQL_FIELD_TYPE_STRING:
+                    case MYSQL_FIELD_TYPE_GEOMETRY:
+                    case MYSQL_FIELD_TYPE_JSON:
+                    case MYSQL_FIELD_TYPE_TIME:
+                    case MYSQL_FIELD_TYPE_DATE:
+                    case MYSQL_FIELD_TYPE_NEWDATE:
+                    case MYSQL_FIELD_TYPE_TIMESTAMP:
+                    case MYSQL_FIELD_TYPE_DATETIME:
                         os << row->field(j)->string();
                         break;
                     default:
@@ -367,7 +367,7 @@ void MysqlReply::Print(std::ostream& os) const {
         }
         os << "\neof2.warning:" << r._eof2._warning;
         os << "\neof2.status:" << r._eof2._status;
-    } else if (_type == RSP_EOF) {
+    } else if (_type == MYSQL_RSP_EOF) {
         const Eof& e = *_data.eof;
         os << "\nwarning:" << e._warning << "\nstatus:" << e._status;
     } else {
@@ -571,7 +571,7 @@ bool MysqlReply::Eof::isEof(const butil::IOBuf& buf) {
     uint8_t tmp[5];
     const uint8_t* p = (const uint8_t*)buf.fetch(tmp, sizeof(tmp));
     uint8_t type = p[4];
-    if (type == RSP_EOF) {
+    if (type == MYSQL_RSP_EOF) {
         buf.copy_to(&_warning, 2, 5);
         buf.copy_to(&_status, 2, 7);
         return true;
@@ -648,7 +648,7 @@ bool MysqlReply::Field::parseField(butil::IOBuf& buf,
     // field type
     _type = column->_type;
     // field flag
-    _is_unsigned = column->_flag & UNSIGNED_FLAG;
+    _is_unsigned = column->_flag & MYSQL_UNSIGNED_FLAG;
     // field is null
     _is_null = len > 0 ? false : true;
     if (_is_null) {
@@ -658,61 +658,61 @@ bool MysqlReply::Field::parseField(butil::IOBuf& buf,
     butil::IOBuf str;
     buf.cutn(&str, len);
     switch (_type) {
-        case FIELD_TYPE_TINY:
-            if (column->_flag & UNSIGNED_FLAG) {
+        case MYSQL_FIELD_TYPE_TINY:
+            if (column->_flag & MYSQL_UNSIGNED_FLAG) {
                 std::istringstream(str.to_string()) >> _data.tiny;
             } else {
                 std::istringstream(str.to_string()) >> _data.stiny;
             }
             break;
-        case FIELD_TYPE_SHORT:
-        case FIELD_TYPE_YEAR:
-            if (column->_flag & UNSIGNED_FLAG) {
+        case MYSQL_FIELD_TYPE_SHORT:
+        case MYSQL_FIELD_TYPE_YEAR:
+            if (column->_flag & MYSQL_UNSIGNED_FLAG) {
                 std::istringstream(str.to_string()) >> _data.small;
             } else {
                 std::istringstream(str.to_string()) >> _data.ssmall;
             }
             break;
-        case FIELD_TYPE_INT24:
-        case FIELD_TYPE_LONG:
-            if (column->_flag & UNSIGNED_FLAG) {
+        case MYSQL_FIELD_TYPE_INT24:
+        case MYSQL_FIELD_TYPE_LONG:
+            if (column->_flag & MYSQL_UNSIGNED_FLAG) {
                 std::istringstream(str.to_string()) >> _data.integer;
             } else {
                 std::istringstream(str.to_string()) >> _data.sinteger;
             }
             break;
-        case FIELD_TYPE_LONGLONG:
-            if (column->_flag & UNSIGNED_FLAG) {
+        case MYSQL_FIELD_TYPE_LONGLONG:
+            if (column->_flag & MYSQL_UNSIGNED_FLAG) {
                 std::istringstream(str.to_string()) >> _data.bigint;
             } else {
                 std::istringstream(str.to_string()) >> _data.sbigint;
             }
             break;
-        case FIELD_TYPE_FLOAT:
+        case MYSQL_FIELD_TYPE_FLOAT:
             std::istringstream(str.to_string()) >> _data.float32;
             break;
-        case FIELD_TYPE_DOUBLE:
+        case MYSQL_FIELD_TYPE_DOUBLE:
             std::istringstream(str.to_string()) >> _data.float64;
             break;
-        case FIELD_TYPE_DECIMAL:
-        case FIELD_TYPE_NEWDECIMAL:
-        case FIELD_TYPE_VARCHAR:
-        case FIELD_TYPE_BIT:
-        case FIELD_TYPE_ENUM:
-        case FIELD_TYPE_SET:
-        case FIELD_TYPE_TINY_BLOB:
-        case FIELD_TYPE_MEDIUM_BLOB:
-        case FIELD_TYPE_LONG_BLOB:
-        case FIELD_TYPE_BLOB:
-        case FIELD_TYPE_VAR_STRING:
-        case FIELD_TYPE_STRING:
-        case FIELD_TYPE_GEOMETRY:
-        case FIELD_TYPE_JSON:
-        case FIELD_TYPE_TIME:
-        case FIELD_TYPE_DATE:
-        case FIELD_TYPE_NEWDATE:
-        case FIELD_TYPE_TIMESTAMP:
-        case FIELD_TYPE_DATETIME: {
+        case MYSQL_FIELD_TYPE_DECIMAL:
+        case MYSQL_FIELD_TYPE_NEWDECIMAL:
+        case MYSQL_FIELD_TYPE_VARCHAR:
+        case MYSQL_FIELD_TYPE_BIT:
+        case MYSQL_FIELD_TYPE_ENUM:
+        case MYSQL_FIELD_TYPE_SET:
+        case MYSQL_FIELD_TYPE_TINY_BLOB:
+        case MYSQL_FIELD_TYPE_MEDIUM_BLOB:
+        case MYSQL_FIELD_TYPE_LONG_BLOB:
+        case MYSQL_FIELD_TYPE_BLOB:
+        case MYSQL_FIELD_TYPE_VAR_STRING:
+        case MYSQL_FIELD_TYPE_STRING:
+        case MYSQL_FIELD_TYPE_GEOMETRY:
+        case MYSQL_FIELD_TYPE_JSON:
+        case MYSQL_FIELD_TYPE_TIME:
+        case MYSQL_FIELD_TYPE_DATE:
+        case MYSQL_FIELD_TYPE_NEWDATE:
+        case MYSQL_FIELD_TYPE_TIMESTAMP:
+        case MYSQL_FIELD_TYPE_DATETIME: {
             char* d = NULL;
             MY_ALLOC_CHECK(my_alloc_check(arena, len, d));
             str.copy_to(d);

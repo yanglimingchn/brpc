@@ -33,7 +33,7 @@ public:
     MysqlAuthenticator(const std::string& user,
                        const std::string& passwd,
                        const std::string& schema = "",
-                       const MysqlCollation collation = utf8_general_ci)
+                       const MysqlCollation collation = MYSQL_utf8_general_ci)
         : _user(user), _passwd(passwd), _schema(schema), _collation(collation) {}
 
     int GenerateCredential(std::string* auth_str) const;
