@@ -24,8 +24,7 @@
 #include <brpc/mysql.h>
 #include <brpc/policy/mysql_authenticator.h>
 
-DEFINE_string(connection_type,
-              "pooled",
+DEFINE_string(connection_type, "pooled",
               "Connection type. Available values: single, pooled, short");
 DEFINE_string(server, "127.0.0.1", "IP Address of server");
 DEFINE_int32(timeout_ms, 5000, "RPC timeout in milliseconds");
@@ -68,7 +67,8 @@ static bool access_mysql(brpc::Channel& channel, const char* command) {
         //     const brpc::MysqlReply::Row* row;
         //     while ((row = reply.next()) != NULL) {
         //         for (uint64_t k = 0; k < row->field_number(); ++k) {
-        //             std::cout << "field(" << k << "): " << row->field(k)->string() << "\t";
+        //             std::cout << "field(" << k << "): " <<
+        //             row->field(k)->string() << "\t";
         //         }
         //         std::cout << std::endl;
         //     }
@@ -83,9 +83,7 @@ static bool access_mysql(brpc::Channel& channel, const char* command) {
 
 // For freeing the memory returned by readline().
 struct Freer {
-    void operator()(char* mem) {
-        free(mem);
-    }
+    void operator()(char* mem) { free(mem); }
 };
 
 static void dummy_handler(int) {}
@@ -116,7 +114,8 @@ int main(int argc, char* argv[]) {
     options.connection_type = FLAGS_connection_type;
     options.timeout_ms = FLAGS_timeout_ms /*milliseconds*/;
     options.max_retry = FLAGS_max_retry;
-    options.auth = new brpc::policy::MysqlAuthenticator("yangliming01", "123456", "test");
+    options.auth =
+        new brpc::policy::MysqlAuthenticator("yangliming01", "123456", "test");
     if (channel.Init("127.0.0.1", 3306, &options) != 0) {
         LOG(ERROR) << "Fail to initialize channel";
         return -1;
@@ -140,9 +139,9 @@ int main(int argc, char* argv[]) {
 
         for (;;) {
             char prompt[128];
-            snprintf(prompt, sizeof(prompt), "mysql %s> ", FLAGS_server.c_str());
+            snprintf(prompt, sizeof(prompt), "mysql %s> ",
+                     FLAGS_server.c_str());
             std::unique_ptr<char, Freer> command(readline(prompt));
-            LOG(ERROR) << "Fail to access mysql, " << prompt;
             if (command == NULL || *command == '\0') {
                 if (g_canceled) {
                     // No input after the prompt and user pressed Ctrl-C,

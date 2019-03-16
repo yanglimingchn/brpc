@@ -24,6 +24,16 @@
 
 namespace brpc {
 
+class CheckParsed {
+public:
+    CheckParsed() : _is_parsed(false) {}
+    bool is_parsed() const { return _is_parsed; }
+    void set_parsed() { _is_parsed = true; }
+
+private:
+    bool _is_parsed;
+};
+
 struct MysqlHeader {
     uint32_t payload_size;
     uint32_t seq;
@@ -355,8 +365,9 @@ const char* MysqlRspTypeToString(MysqlRspType);
 class MysqlReply {
 public:
     // Mysql Auth package
-    class Auth {
+    class Auth : private CheckParsed {
     public:
+        Auth();
         uint8_t protocol() const;
         butil::StringPiece version() const;
         uint32_t thread_id() const;
@@ -370,9 +381,7 @@ public:
         butil::StringPiece auth_plugin() const;
 
     private:
-        bool parseAuth(butil::IOBuf& buf, butil::Arena* arena);
-        bool is_parsed() const;
-        void set_parsed();
+        bool parse(butil::IOBuf& buf, butil::Arena* arena);
 
         DISALLOW_COPY_AND_ASSIGN(Auth);
         friend class MysqlReply;
@@ -388,12 +397,11 @@ public:
         uint8_t _auth_plugin_length;
         butil::StringPiece _salt2;
         butil::StringPiece _auth_plugin;
-        // if it is parsed
-        bool _is_parsed;
     };
     // Mysql Ok package
-    class Ok {
+    class Ok : private CheckParsed {
     public:
+        Ok();
         uint64_t affect_row() const;
         uint64_t index() const;
         uint16_t status() const;
@@ -401,9 +409,7 @@ public:
         butil::StringPiece msg() const;
 
     private:
-        bool parseOk(butil::IOBuf& buf, butil::Arena* arena);
-        bool is_parsed() const;
-        void set_parsed();
+        bool parse(butil::IOBuf& buf, butil::Arena* arena);
 
         DISALLOW_COPY_AND_ASSIGN(Ok);
         friend class MysqlReply;
@@ -413,20 +419,17 @@ public:
         uint16_t _status;
         uint16_t _warning;
         butil::StringPiece _msg;
-        // if it is parsed
-        bool _is_parsed;
     };
     // Mysql Error package
-    class Error {
+    class Error : private CheckParsed {
     public:
+        Error();
         uint16_t errcode() const;
         butil::StringPiece status() const;
         butil::StringPiece msg() const;
 
     private:
-        bool parseError(butil::IOBuf& buf, butil::Arena* arena);
-        bool is_parsed() const;
-        void set_parsed();
+        bool parse(butil::IOBuf& buf, butil::Arena* arena);
 
         DISALLOW_COPY_AND_ASSIGN(Error);
         friend class MysqlReply;
@@ -434,20 +437,16 @@ public:
         uint16_t _errcode;
         butil::StringPiece _status;
         butil::StringPiece _msg;
-        // if it is parsed
-        bool _is_parsed;
     };
     // Mysql Eof package
-    class Eof {
+    class Eof : private CheckParsed {
     public:
-        Eof() {}
+        Eof();
         uint16_t warning() const;
         uint16_t status() const;
 
     private:
-        bool parseEof(butil::IOBuf& buf);
-        bool is_parsed() const;
-        void set_parsed();
+        bool parse(butil::IOBuf& buf);
         bool isEof(const butil::IOBuf& buf);
 
         DISALLOW_COPY_AND_ASSIGN(Eof);
@@ -455,12 +454,11 @@ public:
 
         uint16_t _warning;
         uint16_t _status;
-        // if it is parsed
-        bool _is_parsed;
     };
     // Mysql Column
-    class Column {
+    class Column : private CheckParsed {
     public:
+        Column();
         butil::StringPiece catalog() const;
         butil::StringPiece database() const;
         butil::StringPiece table() const;
@@ -474,9 +472,7 @@ public:
         uint8_t decimal() const;
 
     private:
-        bool parseColumn(butil::IOBuf& buf, butil::Arena* arena);
-        bool is_parsed() const;
-        void set_parsed();
+        bool parse(butil::IOBuf& buf, butil::Arena* arena);
 
         DISALLOW_COPY_AND_ASSIGN(Column);
         friend class MysqlReply;
@@ -492,34 +488,11 @@ public:
         MysqlFieldType _type;
         MysqlFieldFlag _flag;
         uint8_t _decimal;
-
-        // if it is parsed
-        bool _is_parsed;
-    };
-    // Mysql Row
-    class Field;
-    class Row {
-    public:
-        uint64_t field_number() const;
-        const Field& field(const uint64_t index) const;
-
-    private:
-        bool parseTextRow(butil::IOBuf& buf);
-        bool is_parsed() const;
-        void set_parsed();
-
-        DISALLOW_COPY_AND_ASSIGN(Row);
-        friend class MysqlReply;
-
-        Field* _fields;
-        uint64_t _field_number;
-        Row* _next;
-        // if it is parsed
-        bool _is_parsed;
     };
     // Mysql Field
-    class Field {
+    class Field : private CheckParsed {
     public:
+        Field();
         int8_t stiny() const;
         uint8_t tiny() const;
         int16_t ssmall() const;
@@ -546,13 +519,11 @@ public:
         bool is_null() const;
 
     private:
-        bool parseField(butil::IOBuf& buf, const MysqlReply::Column* column, butil::Arena* arena);
-        bool is_parsed() const;
-        void set_parsed();
+        bool parse(butil::IOBuf& buf, const MysqlReply::Column* column,
+                   butil::Arena* arena);
 
         DISALLOW_COPY_AND_ASSIGN(Field);
         friend class MysqlReply;
-        // friend class Row;
 
         union {
             int8_t stiny;
@@ -566,21 +537,32 @@ public:
             float float32;
             double float64;
             butil::StringPiece str;
-        } _data;
+        } _data = {.str = NULL};
         MysqlFieldType _type;
-        bool _is_null;
         bool _is_unsigned;
+    };
+    // Mysql Row
+    class Row : private CheckParsed {
+    public:
+        Row();
+        uint64_t field_number() const;
+        const Field& field(const uint64_t index) const;
 
-        // if it is parsed
-        bool _is_parsed;
+    private:
+        bool parseText(butil::IOBuf& buf);
+
+        DISALLOW_COPY_AND_ASSIGN(Row);
+        friend class MysqlReply;
+
+        Field* _fields;
+        uint64_t _field_number;
+        Row* _next;
     };
 
 public:
     MysqlReply();
-    bool ConsumePartialIOBuf(butil::IOBuf& buf,
-                             butil::Arena* arena,
-                             const bool is_auth,
-                             bool* is_multi);
+    bool ConsumePartialIOBuf(butil::IOBuf& buf, butil::Arena* arena,
+                             const bool is_auth, bool* is_multi);
     void Swap(MysqlReply& other);
     void Print(std::ostream& os) const;
     // response type
@@ -590,11 +572,6 @@ public:
     const Ok* ok() const;
     const Error* error() const;
     const Eof* eof() const;
-    bool is_auth() const;
-    bool is_ok() const;
-    bool is_error() const;
-    bool is_eof() const;
-    bool is_resultset() const;
     // get column number
     uint64_t column_number() const;
     // get one column
@@ -603,39 +580,43 @@ public:
     uint64_t row_number() const;
     // get one row
     const Row* next() const;
+    bool is_auth() const;
+    bool is_ok() const;
+    bool is_error() const;
+    bool is_eof() const;
+    bool is_resultset() const;
 
 private:
     // Mysql result set header
-    struct ResultSetHeader {
-        bool parseResultHeader(butil::IOBuf& buf);
-        bool is_parsed() const {
-            return _is_parsed;
-        }
-        void set_parsed() {
-            _is_parsed = true;
-        }
+    struct ResultSetHeader : private CheckParsed {
+        ResultSetHeader() : _column_number(0), _extra_msg(0) {}
+        bool parse(butil::IOBuf& buf);
         uint64_t _column_number;
         uint64_t _extra_msg;
 
     private:
         DISALLOW_COPY_AND_ASSIGN(ResultSetHeader);
-        bool _is_parsed;
     };
     // Mysql result set
     struct ResultSet {
+        ResultSet() : _columns(NULL), _row_number(0) {
+            _first = _last = &_dummy;
+            _cur = _first;
+        }
         ResultSetHeader _header;
         Column* _columns;
         Eof _eof1;
         // row list
         Row* _first;
-        Row* _last;
         Row* _cur;
+        Row* _last;
         // row list end
         uint64_t _row_number;
         Eof _eof2;
 
     private:
         DISALLOW_COPY_AND_ASSIGN(ResultSet);
+        Row _dummy;
     };
     // member values
     MysqlRspType _type;
@@ -668,226 +649,160 @@ inline std::ostream& operator<<(std::ostream& os, const MysqlReply& r) {
     r.Print(os);
     return os;
 }
-inline MysqlRspType MysqlReply::type() const {
-    return _type;
-}
+inline MysqlRspType MysqlReply::type() const { return _type; }
 inline const MysqlReply::Auth* MysqlReply::auth() const {
     if (is_auth()) {
         return _data.auth;
     }
-    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an auth";
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type)
+                 << ", not an auth";
     return NULL;
 }
 inline const MysqlReply::Ok* MysqlReply::ok() const {
     if (is_ok()) {
         return _data.ok;
     }
-    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an ok";
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type)
+                 << ", not an ok";
     return NULL;
 }
 inline const MysqlReply::Error* MysqlReply::error() const {
     if (is_error()) {
         return _data.error;
     }
-    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an error";
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type)
+                 << ", not an error";
     return NULL;
 }
 inline const MysqlReply::Eof* MysqlReply::eof() const {
     if (is_eof()) {
         return _data.eof;
     }
-    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an eof";
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type)
+                 << ", not an eof";
     return NULL;
-}
-inline bool MysqlReply::is_auth() const {
-    return _type == MYSQL_RSP_AUTH;
-}
-inline bool MysqlReply::is_ok() const {
-    return _type == MYSQL_RSP_OK;
-}
-inline bool MysqlReply::is_error() const {
-    return _type == MYSQL_RSP_ERROR;
-}
-inline bool MysqlReply::is_eof() const {
-    return _type == MYSQL_RSP_EOF;
-}
-inline bool MysqlReply::is_resultset() const {
-    return _type == MYSQL_RSP_RESULTSET;
 }
 inline uint64_t MysqlReply::column_number() const {
     if (is_resultset()) {
         return _data.result_set.const_var->_header._column_number;
     }
-    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type)
+                 << ", not an resultset";
     return 0;
 }
-inline const MysqlReply::Column* MysqlReply::column(const uint64_t index) const {
+inline const MysqlReply::Column* MysqlReply::column(
+    const uint64_t index) const {
     if (is_resultset()) {
         if (index > _data.result_set.const_var->_header._column_number) {
             LOG(ERROR) << "wrong index, must between [0, "
-                       << _data.result_set.const_var->_header._column_number << ")";
+                       << _data.result_set.const_var->_header._column_number
+                       << ")";
             return NULL;
         }
         return _data.result_set.const_var->_columns + index;
     }
-    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type)
+                 << ", not an resultset";
     return NULL;
 }
 inline uint64_t MysqlReply::row_number() const {
     if (is_resultset()) {
         return _data.result_set.const_var->_row_number;
     }
-    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type)
+                 << ", not an resultset";
     return 0;
 }
 inline const MysqlReply::Row* MysqlReply::next() const {
     if (is_resultset()) {
-        if (_data.result_set.var->_cur == NULL) {
+        if (_data.result_set.var->_cur == _data.result_set.var->_last->_next) {
             _data.result_set.var->_cur = _data.result_set.var->_first;
-        } else {
-            _data.result_set.var->_cur = _data.result_set.var->_cur->_next;
         }
+        _data.result_set.var->_cur = _data.result_set.var->_cur->_next;
         return _data.result_set.var->_cur;
     }
-    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type) << ", not an resultset";
+    CHECK(false) << "The reply is " << MysqlRspTypeToString(_type)
+                 << ", not an resultset";
     return NULL;
 }
+inline bool MysqlReply::is_auth() const { return _type == MYSQL_RSP_AUTH; }
+inline bool MysqlReply::is_ok() const { return _type == MYSQL_RSP_OK; }
+inline bool MysqlReply::is_error() const { return _type == MYSQL_RSP_ERROR; }
+inline bool MysqlReply::is_eof() const { return _type == MYSQL_RSP_EOF; }
+inline bool MysqlReply::is_resultset() const {
+    return _type == MYSQL_RSP_RESULTSET;
+}
 // mysql auth
-inline uint8_t MysqlReply::Auth::protocol() const {
-    return _protocol;
-}
-inline butil::StringPiece MysqlReply::Auth::version() const {
-    return _version;
-}
-inline uint32_t MysqlReply::Auth::thread_id() const {
-    return _thread_id;
-}
-inline butil::StringPiece MysqlReply::Auth::salt() const {
-    return _salt;
-}
-inline uint16_t MysqlReply::Auth::capability() const {
-    return _capability;
-}
-inline uint8_t MysqlReply::Auth::language() const {
-    return _language;
-}
-inline uint16_t MysqlReply::Auth::status() const {
-    return _status;
-}
+inline MysqlReply::Auth::Auth()
+    : _protocol(0),
+      _thread_id(0),
+      _capability(0),
+      _language(0),
+      _status(0),
+      _extended_capability(0),
+      _auth_plugin_length(0) {}
+inline uint8_t MysqlReply::Auth::protocol() const { return _protocol; }
+inline butil::StringPiece MysqlReply::Auth::version() const { return _version; }
+inline uint32_t MysqlReply::Auth::thread_id() const { return _thread_id; }
+inline butil::StringPiece MysqlReply::Auth::salt() const { return _salt; }
+inline uint16_t MysqlReply::Auth::capability() const { return _capability; }
+inline uint8_t MysqlReply::Auth::language() const { return _language; }
+inline uint16_t MysqlReply::Auth::status() const { return _status; }
 inline uint16_t MysqlReply::Auth::extended_capability() const {
     return _extended_capability;
 }
 inline uint8_t MysqlReply::Auth::auth_plugin_length() const {
     return _auth_plugin_length;
 }
-inline butil::StringPiece MysqlReply::Auth::salt2() const {
-    return _salt2;
-}
+inline butil::StringPiece MysqlReply::Auth::salt2() const { return _salt2; }
 inline butil::StringPiece MysqlReply::Auth::auth_plugin() const {
     return _auth_plugin;
 }
-inline bool MysqlReply::Auth::is_parsed() const {
-    return _is_parsed;
-}
-inline void MysqlReply::Auth::set_parsed() {
-    _is_parsed = true;
-}
 // mysql reply ok
-inline uint64_t MysqlReply::Ok::affect_row() const {
-    return _affect_row;
-}
-inline uint64_t MysqlReply::Ok::index() const {
-    return _index;
-}
-inline uint16_t MysqlReply::Ok::status() const {
-    return _status;
-}
-inline uint16_t MysqlReply::Ok::warning() const {
-    return _warning;
-}
-inline butil::StringPiece MysqlReply::Ok::msg() const {
-    return _msg;
-}
-inline bool MysqlReply::Ok::is_parsed() const {
-    return _is_parsed;
-}
-inline void MysqlReply::Ok::set_parsed() {
-    _is_parsed = true;
-}
+inline MysqlReply::Ok::Ok()
+    : _affect_row(0), _index(0), _status(0), _warning(0) {}
+inline uint64_t MysqlReply::Ok::affect_row() const { return _affect_row; }
+inline uint64_t MysqlReply::Ok::index() const { return _index; }
+inline uint16_t MysqlReply::Ok::status() const { return _status; }
+inline uint16_t MysqlReply::Ok::warning() const { return _warning; }
+inline butil::StringPiece MysqlReply::Ok::msg() const { return _msg; }
 // mysql reply error
-inline uint16_t MysqlReply::Error::errcode() const {
-    return _errcode;
-}
-inline butil::StringPiece MysqlReply::Error::status() const {
-    return _status;
-}
-inline butil::StringPiece MysqlReply::Error::msg() const {
-    return _msg;
-}
-inline bool MysqlReply::Error::is_parsed() const {
-    return _is_parsed;
-}
-inline void MysqlReply::Error::set_parsed() {
-    _is_parsed = true;
-}
+inline MysqlReply::Error::Error() : _errcode(0) {}
+inline uint16_t MysqlReply::Error::errcode() const { return _errcode; }
+inline butil::StringPiece MysqlReply::Error::status() const { return _status; }
+inline butil::StringPiece MysqlReply::Error::msg() const { return _msg; }
 // mysql reply eof
-inline uint16_t MysqlReply::Eof::warning() const {
-    return _warning;
-}
-inline uint16_t MysqlReply::Eof::status() const {
-    return _status;
-}
-inline bool MysqlReply::Eof::is_parsed() const {
-    return _is_parsed;
-}
-inline void MysqlReply::Eof::set_parsed() {
-    _is_parsed = true;
-}
+inline MysqlReply::Eof::Eof() : _warning(0), _status(0) {}
+inline uint16_t MysqlReply::Eof::warning() const { return _warning; }
+inline uint16_t MysqlReply::Eof::status() const { return _status; }
 // mysql reply column
+inline MysqlReply::Column::Column() : _length(0), _decimal(0) {}
 inline butil::StringPiece MysqlReply::Column::catalog() const {
     return _catalog;
 }
 inline butil::StringPiece MysqlReply::Column::database() const {
     return _database;
 }
-inline butil::StringPiece MysqlReply::Column::table() const {
-    return _table;
-}
+inline butil::StringPiece MysqlReply::Column::table() const { return _table; }
 inline butil::StringPiece MysqlReply::Column::origin_table() const {
     return _origin_table;
 }
-inline butil::StringPiece MysqlReply::Column::name() const {
-    return _name;
-}
+inline butil::StringPiece MysqlReply::Column::name() const { return _name; }
 inline butil::StringPiece MysqlReply::Column::origin_name() const {
     return _origin_name;
 }
 inline MysqlCollation MysqlReply::Column::collation() const {
     return _collation;
 }
-inline uint32_t MysqlReply::Column::length() const {
-    return _length;
-}
-inline MysqlFieldType MysqlReply::Column::type() const {
-    return _type;
-}
-inline MysqlFieldFlag MysqlReply::Column::flag() const {
-    return _flag;
-}
-inline uint8_t MysqlReply::Column::decimal() const {
-    return _decimal;
-}
-inline bool MysqlReply::Column::is_parsed() const {
-    return _is_parsed;
-}
-inline void MysqlReply::Column::set_parsed() {
-    _is_parsed = true;
-}
+inline uint32_t MysqlReply::Column::length() const { return _length; }
+inline MysqlFieldType MysqlReply::Column::type() const { return _type; }
+inline MysqlFieldFlag MysqlReply::Column::flag() const { return _flag; }
+inline uint8_t MysqlReply::Column::decimal() const { return _decimal; }
 // mysql reply row
-inline uint64_t MysqlReply::Row::field_number() const {
-    return _field_number;
-}
-inline const MysqlReply::Field& MysqlReply::Row::field(const uint64_t index) const {
+inline MysqlReply::Row::Row() : _fields(NULL), _field_number(0), _next(NULL) {}
+inline uint64_t MysqlReply::Row::field_number() const { return _field_number; }
+inline const MysqlReply::Field& MysqlReply::Row::field(
+    const uint64_t index) const {
     if (index > _field_number) {
         LOG(ERROR) << "wrong index, must between [0, " << _field_number << ")";
         static Field field_nil;
@@ -895,95 +810,95 @@ inline const MysqlReply::Field& MysqlReply::Row::field(const uint64_t index) con
     }
     return _fields[index];
 }
-inline bool MysqlReply::Row::is_parsed() const {
-    return _is_parsed;
-}
-inline void MysqlReply::Row::set_parsed() {
-    _is_parsed = true;
-}
 // mysql reply field
-// inline MysqlReply::Field::Field() {
-//     _data.padding[0] = 0;
-//     _data.padding[1] = 0;
-//     _type = MYSQL_FIELD_TYPE_NULL;
-//     _is_null = true;
-//     _is_parsed = false;
-// }
+inline MysqlReply::Field::Field()
+    : _type(MYSQL_FIELD_TYPE_NULL), _is_unsigned(false) {}
 inline int8_t MysqlReply::Field::stiny() const {
     if (is_stiny()) {
         return _data.stiny;
     }
-    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an stiny";
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type)
+                 << ", not an stiny";
     return 0;
 }
 inline uint8_t MysqlReply::Field::tiny() const {
     if (is_tiny()) {
         return _data.tiny;
     }
-    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type) << ", not an tiny";
+    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type)
+                 << ", not an tiny";
     return 0;
 }
 inline int16_t MysqlReply::Field::ssmall() const {
     if (is_ssmall()) {
         return _data.ssmall;
     }
-    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an ssmall";
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type)
+                 << ", not an ssmall";
     return 0;
 }
 inline uint16_t MysqlReply::Field::small() const {
     if (is_small()) {
         return _data.small;
     }
-    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type) << ", not an small";
+    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type)
+                 << ", not an small";
     return 0;
 }
 inline int32_t MysqlReply::Field::sinteger() const {
     if (is_sinteger()) {
         return _data.sinteger;
     }
-    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an sinteger";
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type)
+                 << ", not an sinteger";
     return 0;
 }
 inline uint32_t MysqlReply::Field::integer() const {
     if (is_integer()) {
         return _data.integer;
     }
-    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type) << ", not an integer";
+    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type)
+                 << ", not an integer";
     return 0;
 }
 inline int64_t MysqlReply::Field::sbigint() const {
     if (is_sbigint()) {
         return _data.sbigint;
     }
-    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an sbigint";
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type)
+                 << ", not an sbigint";
     return 0;
 }
 inline uint64_t MysqlReply::Field::bigint() const {
     if (is_bigint()) {
         return _data.bigint;
     }
-    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type) << ", not an bigint";
+    CHECK(false) << "The reply is unsigned " << MysqlFieldTypeToString(_type)
+                 << ", not an bigint";
     return 0;
 }
 inline float MysqlReply::Field::float32() const {
     if (is_float32()) {
         return _data.float32;
     }
-    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an float32";
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type)
+                 << ", not an float32";
     return 0;
 }
 inline double MysqlReply::Field::float64() const {
     if (is_float64()) {
         return _data.float64;
     }
-    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an float64";
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type)
+                 << ", not an float64";
     return 0;
 }
 inline butil::StringPiece MysqlReply::Field::string() const {
     if (is_string()) {
         return _data.str;
     }
-    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type) << ", not an string";
+    CHECK(false) << "The reply is " << MysqlFieldTypeToString(_type)
+                 << ", not an string";
     return butil::StringPiece();
 }
 inline bool MysqlReply::Field::is_stiny() const {
@@ -993,16 +908,24 @@ inline bool MysqlReply::Field::is_tiny() const {
     return _type == MYSQL_FIELD_TYPE_TINY && _is_unsigned;
 }
 inline bool MysqlReply::Field::is_ssmall() const {
-    return (_type == MYSQL_FIELD_TYPE_SHORT || _type == MYSQL_FIELD_TYPE_YEAR) && !_is_unsigned;
+    return (_type == MYSQL_FIELD_TYPE_SHORT ||
+            _type == MYSQL_FIELD_TYPE_YEAR) &&
+           !_is_unsigned;
 }
 inline bool MysqlReply::Field::is_small() const {
-    return (_type == MYSQL_FIELD_TYPE_SHORT || _type == MYSQL_FIELD_TYPE_YEAR) && _is_unsigned;
+    return (_type == MYSQL_FIELD_TYPE_SHORT ||
+            _type == MYSQL_FIELD_TYPE_YEAR) &&
+           _is_unsigned;
 }
 inline bool MysqlReply::Field::is_sinteger() const {
-    return (_type == MYSQL_FIELD_TYPE_INT24 || _type == MYSQL_FIELD_TYPE_LONG) && !_is_unsigned;
+    return (_type == MYSQL_FIELD_TYPE_INT24 ||
+            _type == MYSQL_FIELD_TYPE_LONG) &&
+           !_is_unsigned;
 }
 inline bool MysqlReply::Field::is_integer() const {
-    return (_type == MYSQL_FIELD_TYPE_INT24 || _type == MYSQL_FIELD_TYPE_LONG) && _is_unsigned;
+    return (_type == MYSQL_FIELD_TYPE_INT24 ||
+            _type == MYSQL_FIELD_TYPE_LONG) &&
+           _is_unsigned;
 }
 inline bool MysqlReply::Field::is_sbigint() const {
     return _type == MYSQL_FIELD_TYPE_LONGLONG && !_is_unsigned;
@@ -1017,42 +940,43 @@ inline bool MysqlReply::Field::is_float64() const {
     return _type == MYSQL_FIELD_TYPE_DOUBLE;
 }
 inline bool MysqlReply::Field::is_string() const {
-    return _type == MYSQL_FIELD_TYPE_DECIMAL || _type == MYSQL_FIELD_TYPE_NEWDECIMAL ||
-        _type == MYSQL_FIELD_TYPE_VARCHAR || _type == MYSQL_FIELD_TYPE_BIT ||
-        _type == MYSQL_FIELD_TYPE_ENUM || _type == MYSQL_FIELD_TYPE_SET ||
-        _type == MYSQL_FIELD_TYPE_TINY_BLOB || _type == MYSQL_FIELD_TYPE_MEDIUM_BLOB ||
-        _type == MYSQL_FIELD_TYPE_LONG_BLOB || _type == MYSQL_FIELD_TYPE_BLOB ||
-        _type == MYSQL_FIELD_TYPE_VAR_STRING || _type == MYSQL_FIELD_TYPE_STRING ||
-        _type == MYSQL_FIELD_TYPE_GEOMETRY || _type == MYSQL_FIELD_TYPE_JSON ||
-        _type == MYSQL_FIELD_TYPE_TIME || _type == MYSQL_FIELD_TYPE_DATE ||
-        _type == MYSQL_FIELD_TYPE_NEWDATE || _type == MYSQL_FIELD_TYPE_TIMESTAMP ||
-        _type == MYSQL_FIELD_TYPE_DATETIME;
+    return _type == MYSQL_FIELD_TYPE_DECIMAL ||
+           _type == MYSQL_FIELD_TYPE_NEWDECIMAL ||
+           _type == MYSQL_FIELD_TYPE_VARCHAR || _type == MYSQL_FIELD_TYPE_BIT ||
+           _type == MYSQL_FIELD_TYPE_ENUM || _type == MYSQL_FIELD_TYPE_SET ||
+           _type == MYSQL_FIELD_TYPE_TINY_BLOB ||
+           _type == MYSQL_FIELD_TYPE_MEDIUM_BLOB ||
+           _type == MYSQL_FIELD_TYPE_LONG_BLOB ||
+           _type == MYSQL_FIELD_TYPE_BLOB ||
+           _type == MYSQL_FIELD_TYPE_VAR_STRING ||
+           _type == MYSQL_FIELD_TYPE_STRING ||
+           _type == MYSQL_FIELD_TYPE_GEOMETRY ||
+           _type == MYSQL_FIELD_TYPE_JSON || _type == MYSQL_FIELD_TYPE_TIME ||
+           _type == MYSQL_FIELD_TYPE_DATE ||
+           _type == MYSQL_FIELD_TYPE_NEWDATE ||
+           _type == MYSQL_FIELD_TYPE_TIMESTAMP ||
+           _type == MYSQL_FIELD_TYPE_DATETIME;
 }
 inline bool MysqlReply::Field::is_null() const {
-    return _is_null;
-}
-inline bool MysqlReply::Field::is_parsed() const {
-    return _is_parsed;
-}
-inline void MysqlReply::Field::set_parsed() {
-    _is_parsed = true;
+    return _type == MYSQL_FIELD_TYPE_NULL;
 }
 // little endian order to host order
 inline uint16_t mysql_uint2korr(const uint8_t* A) {
     return (uint16_t)(((uint16_t)(A[0])) + ((uint16_t)(A[1]) << 8));
 }
 inline uint32_t mysql_uint3korr(const uint8_t* A) {
-    return (uint32_t)(((uint32_t)(A[0])) + (((uint32_t)(A[1])) << 8) + (((uint32_t)(A[2])) << 16));
+    return (uint32_t)(((uint32_t)(A[0])) + (((uint32_t)(A[1])) << 8) +
+                      (((uint32_t)(A[2])) << 16));
 }
 inline uint32_t mysql_uint4korr(const uint8_t* A) {
-    return (uint32_t)(((uint32_t)(A[0])) + (((uint32_t)(A[1])) << 8) + (((uint32_t)(A[2])) << 16) +
-                      (((uint32_t)(A[3])) << 24));
+    return (uint32_t)(((uint32_t)(A[0])) + (((uint32_t)(A[1])) << 8) +
+                      (((uint32_t)(A[2])) << 16) + (((uint32_t)(A[3])) << 24));
 }
 inline uint64_t mysql_uint8korr(const uint8_t* A) {
-    return (uint64_t)(((uint64_t)(A[0])) + (((uint64_t)(A[1])) << 8) + (((uint64_t)(A[2])) << 16) +
-                      (((uint64_t)(A[3])) << 24) + (((uint64_t)(A[4])) << 32) +
-                      (((uint64_t)(A[5])) << 40) + (((uint64_t)(A[6])) << 48) +
-                      (((uint64_t)(A[7])) << 56));
+    return (uint64_t)(((uint64_t)(A[0])) + (((uint64_t)(A[1])) << 8) +
+                      (((uint64_t)(A[2])) << 16) + (((uint64_t)(A[3])) << 24) +
+                      (((uint64_t)(A[4])) << 32) + (((uint64_t)(A[5])) << 40) +
+                      (((uint64_t)(A[6])) << 48) + (((uint64_t)(A[7])) << 56));
 }
 
 }  // namespace brpc
