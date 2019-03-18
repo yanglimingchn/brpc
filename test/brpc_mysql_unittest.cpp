@@ -8,6 +8,7 @@
 #include <brpc/mysql.h>
 #include <brpc/channel.h>
 #include "butil/logging.h"  // LOG()
+#include "butil/strings/string_piece.h"
 #include <brpc/policy/mysql_authenticator.h>
 #include <gtest/gtest.h>
 
@@ -191,20 +192,25 @@ TEST_F(MysqlTest, ok) {
 
         std::stringstream ss1;
         ss1 << "INSERT INTO `brpc_table` "
-               "(`col1`,`col2`,`col3`,`col4`,`col5`,`col6`,`col7`,`col8`,`col9`,`col10`,`col11`,`"
-               "col12`,`col13`,`col14`,`col15`,`col16`,`col17`,`col18`,`col19`,`col20`,`col21`,`"
+               "(`col1`,`col2`,`col3`,`col4`,`col5`,`col6`,`col7`,`col8`,`col9`,`col10`,`col11`"
+               ",`"
+               "col12`,`col13`,`col14`,`col15`,`col16`,`col17`,`col18`,`col19`,`col20`,`col21`,"
+               "`"
                "col22`"
-               ",`col23`,`col24`,`col25`,`col26`,`col27`,`col28`,`col29`,`col30`,`col31`,`col32`,`"
-               "col33`,`col34`,`col35`,`col36`,`col37`,`col38`,`col39`,`col40`,`col41`,`col42`) "
+               ",`col23`,`col24`,`col25`,`col26`,`col27`,`col28`,`col29`,`col30`,`col31`,`"
+               "col32`,`"
+               "col33`,`col34`,`col35`,`col36`,`col37`,`col38`,`col39`,`col40`,`col41`,`col42`)"
+               " "
                "VALUES ("
             << ++brpc::MYSQL_cnt
-            << ",'col2',0.000,'0000-00-00 "
-               "00:00:00','aaa','bbb','ccc','ddd','eee','fff','ggg','0000-00-00','0000-00-00 "
-               "00:00:00.000000','00:00:00','0000-00-00 "
-               "00:00:00.0000',0,NULL,NULL,NULL,NULL,NULL,0,0,0,0,0,0,0,0,0,'col31','col32','col33'"
-               ","
+            << ",'col2',0.015,'2018-12-01 "
+               "12:13:14','aaa','bbb','ccc','ddd','eee','fff','ggg','2014-09-18', "
+               "'2010-12-10 14:12:09.019473' ,'01:06:09','1970-01-01 08:00:00.9856'"
+               ",2014,NULL,NULL,NULL,NULL,NULL,69,'12.5',16.9,6.7,24,37,69.56,234,6,"
                "'"
-               "col34','col35','col36',NULL,0,'col39','col40','col4','col42')";
+               "col31','col32','col33','col34','col35','col36',NULL,9,'col39','col40','col41'"
+               ",'"
+               "col42')";
         request.Query(ss1.str());
         channel.CallMethod(NULL, &cntl, &request, &response, NULL);
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
@@ -241,18 +247,18 @@ TEST_F(MysqlTest, error) {
 }
 
 TEST_F(MysqlTest, resultset) {
+    brpc::ChannelOptions options;
+    options.protocol = brpc::PROTOCOL_MYSQL;
+    options.connection_type = brpc::MYSQL_connection_type;
+    options.connect_timeout_ms = brpc::MYSQL_connect_timeout_ms;
+    options.timeout_ms = brpc::MYSQL_timeout_ms /*milliseconds*/;
+    options.auth = new brpc::policy::MysqlAuthenticator(
+        brpc::MYSQL_user, brpc::MYSQL_password, brpc::MYSQL_schema);
+    std::stringstream ss;
+    ss << brpc::MYSQL_host + ":" + brpc::MYSQL_port;
+    brpc::Channel channel;
+    ASSERT_EQ(0, channel.Init(ss.str().c_str(), &options));
     {
-        brpc::ChannelOptions options;
-        options.protocol = brpc::PROTOCOL_MYSQL;
-        options.connection_type = brpc::MYSQL_connection_type;
-        options.connect_timeout_ms = brpc::MYSQL_connect_timeout_ms;
-        options.timeout_ms = brpc::MYSQL_timeout_ms /*milliseconds*/;
-        options.auth = new brpc::policy::MysqlAuthenticator(
-            brpc::MYSQL_user, brpc::MYSQL_password, brpc::MYSQL_schema);
-        std::stringstream ss;
-        ss << brpc::MYSQL_host + ":" + brpc::MYSQL_port;
-        brpc::Channel channel;
-        ASSERT_EQ(0, channel.Init(ss.str().c_str(), &options));
         for (int i = 0; i < 50; ++i) {
             brpc::MysqlRequest request;
             brpc::MysqlResponse response;
@@ -261,25 +267,25 @@ TEST_F(MysqlTest, resultset) {
             std::stringstream ss1;
             ss1 << "INSERT INTO `brpc_table` "
                    "(`col1`,`col2`,`col3`,`col4`,`col5`,`col6`,`col7`,`col8`,`col9`,`col10`,`col11`"
-                   ","
-                   "`"
+                   ",`"
                    "col12`,`col13`,`col14`,`col15`,`col16`,`col17`,`col18`,`col19`,`col20`,`col21`,"
                    "`"
                    "col22`"
                    ",`col23`,`col24`,`col25`,`col26`,`col27`,`col28`,`col29`,`col30`,`col31`,`"
-                   "col32`"
-                   ",`"
+                   "col32`,`"
                    "col33`,`col34`,`col35`,`col36`,`col37`,`col38`,`col39`,`col40`,`col41`,`col42`)"
                    " "
                    "VALUES ("
                 << ++brpc::MYSQL_cnt
-                << ",'col2',0.000,'0000-00-00 "
-                   "00:00:00','aaa','bbb','ccc','ddd','eee','fff','ggg','0000-00-00','0000-00-00 "
-                   "00:00:00.000000','00:00:00','0000-00-00 "
-                   "00:00:00.0000',0,NULL,NULL,NULL,NULL,NULL,0,0,0,0,0,0,0,0,0,'col31','col32','"
-                   "col33',"
+                << ",'col2',0.015,'2018-12-01 "
+                   "12:13:14','aaa','bbb','ccc','ddd','eee','fff','ggg','2014-09-18', "
+                   "'2010-12-10 14:12:09.019473' ,'01:06:09','1970-01-01 08:00:00.9856'"
+                   ",2014,NULL,NULL,NULL,NULL,NULL,69,'12.5',16.9,6.7,24,37,69.56,234,6,"
                    "'"
-                   "col34','col35','col36',NULL,0,'col39','col40','col4','col42')";
+                   "col31','col32','col33','col34','col35','col36',NULL,9,'col39','col40','"
+                   "col41'"
+                   ",'"
+                   "col42')";
             request.Query(ss1.str());
             channel.CallMethod(NULL, &cntl, &request, &response, NULL);
             ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
@@ -290,41 +296,29 @@ TEST_F(MysqlTest, resultset) {
     }
 
     {
-        brpc::ChannelOptions options;
-        options.protocol = brpc::PROTOCOL_MYSQL;
-        options.connection_type = brpc::MYSQL_connection_type;
-        options.connect_timeout_ms = brpc::MYSQL_connect_timeout_ms;
-        options.timeout_ms = brpc::MYSQL_timeout_ms /*milliseconds*/;
-        options.auth = new brpc::policy::MysqlAuthenticator(
-            brpc::MYSQL_user, brpc::MYSQL_password, brpc::MYSQL_schema);
-        std::stringstream ss;
-        ss << brpc::MYSQL_host + ":" + brpc::MYSQL_port;
-        brpc::Channel channel;
-        ASSERT_EQ(0, channel.Init(ss.str().c_str(), &options));
-
         std::stringstream ss1;
         for (int i = 0; i < 30; ++i) {
             ss1 << "INSERT INTO `brpc_table` "
                    "(`col1`,`col2`,`col3`,`col4`,`col5`,`col6`,`col7`,`col8`,`col9`,`col10`,`col11`"
-                   ","
-                   "`"
+                   ",`"
                    "col12`,`col13`,`col14`,`col15`,`col16`,`col17`,`col18`,`col19`,`col20`,`col21`,"
                    "`"
                    "col22`"
                    ",`col23`,`col24`,`col25`,`col26`,`col27`,`col28`,`col29`,`col30`,`col31`,`"
-                   "col32`"
-                   ",`"
+                   "col32`,`"
                    "col33`,`col34`,`col35`,`col36`,`col37`,`col38`,`col39`,`col40`,`col41`,`col42`)"
                    " "
                    "VALUES ("
                 << ++brpc::MYSQL_cnt
-                << ",'col2',0.000,'0000-00-00 "
-                   "00:00:00','aaa','bbb','ccc','ddd','eee','fff','ggg','0000-00-00','0000-00-00 "
-                   "00:00:00.000000','00:00:00','0000-00-00 "
-                   "00:00:00.0000',0,NULL,NULL,NULL,NULL,NULL,0,0,0,0,0,0,0,0,0,'col31','col32','"
-                   "col33',"
+                << ",'col2',0.015,'2018-12-01 "
+                   "12:13:14','aaa','bbb','ccc','ddd','eee','fff','ggg','2014-09-18', "
+                   "'2010-12-10 14:12:09.019473' ,'01:06:09','1970-01-01 08:00:00.9856'"
+                   ",2014,NULL,NULL,NULL,NULL,NULL,69,'12.5',16.9,6.7,24,37,69.56,234,6,"
                    "'"
-                   "col34','col35','col36',NULL,0,'col39','col40','col4','col42')";
+                   "col31','col32','col33','col34','col35','col36',NULL,9,'col39','col40','"
+                   "col41'"
+                   ",'"
+                   "col42')";
             ss1 << ";";
         }
         brpc::MysqlRequest request;
@@ -341,18 +335,6 @@ TEST_F(MysqlTest, resultset) {
     }
 
     {
-        brpc::ChannelOptions options;
-        options.protocol = brpc::PROTOCOL_MYSQL;
-        options.connection_type = brpc::MYSQL_connection_type;
-        options.connect_timeout_ms = brpc::MYSQL_connect_timeout_ms;
-        options.timeout_ms = brpc::MYSQL_timeout_ms /*milliseconds*/;
-        options.auth = new brpc::policy::MysqlAuthenticator(
-            brpc::MYSQL_user, brpc::MYSQL_password, brpc::MYSQL_schema);
-        std::stringstream ss;
-        ss << brpc::MYSQL_host + ":" + brpc::MYSQL_port;
-        brpc::Channel channel;
-        ASSERT_EQ(0, channel.Init(ss.str().c_str(), &options));
-
         brpc::MysqlRequest request;
         brpc::MysqlResponse response;
         brpc::Controller cntl;
@@ -364,18 +346,6 @@ TEST_F(MysqlTest, resultset) {
     }
 
     {
-        brpc::ChannelOptions options;
-        options.protocol = brpc::PROTOCOL_MYSQL;
-        options.connection_type = brpc::MYSQL_connection_type;
-        options.connect_timeout_ms = brpc::MYSQL_connect_timeout_ms;
-        options.timeout_ms = brpc::MYSQL_timeout_ms /*milliseconds*/;
-        options.auth = new brpc::policy::MysqlAuthenticator(
-            brpc::MYSQL_user, brpc::MYSQL_password, brpc::MYSQL_schema);
-        std::stringstream ss;
-        ss << brpc::MYSQL_host + ":" + brpc::MYSQL_port;
-        brpc::Channel channel;
-        ASSERT_EQ(0, channel.Init(ss.str().c_str(), &options));
-
         brpc::MysqlRequest request;
         brpc::MysqlResponse response;
         brpc::Controller cntl;
@@ -554,10 +524,81 @@ TEST_F(MysqlTest, resultset) {
         ASSERT_EQ(reply.column(41)->collation(), brpc::MYSQL_utf8_general_ci);
         ASSERT_EQ(reply.column(41)->type(), brpc::MYSQL_FIELD_TYPE_VAR_STRING);
 
+        int i = 0;
         const brpc::MysqlReply::Row* row;
         while ((row = reply.next()) != NULL) {
-            LOG(INFO) << row->field(0).sinteger();
+            ASSERT_EQ(row->field(0).sinteger(), ++i);
+            ASSERT_EQ(row->field(1).string(), "col2");
+            ASSERT_EQ(row->field(2).string(), "0.015");
+            ASSERT_EQ(row->field(3).string(), "2018-12-01 12:13:14");
+            ASSERT_EQ(row->field(4).string(), "aaa");
+            butil::StringPiece field5 = row->field(5).string();
+            ASSERT_EQ(field5.size(), size_t(6));
+            ASSERT_EQ(field5[0], 'b');
+            ASSERT_EQ(field5[1], 'b');
+            ASSERT_EQ(field5[2], 'b');
+            ASSERT_EQ(field5[3], '\0');
+            ASSERT_EQ(field5[4], '\0');
+            ASSERT_EQ(field5[5], '\0');
+            ASSERT_EQ(row->field(6).string(), "ccc");
+            ASSERT_EQ(row->field(7).string(), "ddd");
+            ASSERT_EQ(row->field(8).string(), "eee");
+            ASSERT_EQ(row->field(9).string(), "fff");
+            ASSERT_EQ(row->field(10).string(), "ggg");
+            ASSERT_EQ(row->field(11).string(), "2014-09-18");
+            ASSERT_EQ(row->field(12).string(), "2010-12-10 14:12:09.019473");
+            ASSERT_EQ(row->field(13).string(), "01:06:09");
+            ASSERT_EQ(row->field(14).string(), "1970-01-01 08:00:00.9856");
+            ASSERT_EQ(row->field(15).small(), uint16_t(2014));
+            ASSERT_EQ(row->field(16).is_null(), true);
+            ASSERT_EQ(row->field(17).is_null(), true);
+            ASSERT_EQ(row->field(18).is_null(), true);
+            ASSERT_EQ(row->field(19).is_null(), true);
+            ASSERT_EQ(row->field(20).is_null(), true);
+            ASSERT_EQ(row->field(21).sbigint(), int64_t(69));
+            ASSERT_EQ(row->field(22).string(), "13");
+            ASSERT_EQ(row->field(23).float64(), double(16.9));
+            ASSERT_EQ(row->field(24).float32(), float(6.7));
+            ASSERT_EQ(row->field(25).sinteger(), int32_t(24));
+            ASSERT_EQ(row->field(26).sinteger(), int32_t(37));
+            ASSERT_EQ(row->field(27).float64(), double(69.56));
+            ASSERT_EQ(row->field(28).ssmall(), int16_t(234));
+            ASSERT_EQ(row->field(29).stiny(), '6');
+            ASSERT_EQ(row->field(30).string(), "col31");
+            ASSERT_EQ(row->field(31).string(), "col32");
+            ASSERT_EQ(row->field(32).string(), "col33");
+            ASSERT_EQ(row->field(33).string(), "col34");
+            ASSERT_EQ(row->field(34).string(), "col35");
+            ASSERT_EQ(row->field(35).string(), "col36");
+            ASSERT_EQ(row->field(36).is_null(), true);
+            ASSERT_EQ(row->field(37).stiny(), '9');
+            ASSERT_EQ(row->field(38).string(), "col39");
+            ASSERT_EQ(row->field(39).string(), "col40");
+            ASSERT_EQ(row->field(40).string(), "col4");  // size is 4
+            ASSERT_EQ(row->field(41).string(), "col42");
         }
+    }
+
+    {
+        brpc::MysqlRequest request;
+        brpc::MysqlResponse response;
+        brpc::Controller cntl;
+        request.Query("delete from brpc_table");
+        channel.CallMethod(NULL, &cntl, &request, &response, NULL);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(1, response.reply_size());
+        ASSERT_EQ(brpc::MYSQL_RSP_OK, response.reply(0).type());
+    }
+
+    {
+        brpc::MysqlRequest request;
+        brpc::MysqlResponse response;
+        brpc::Controller cntl;
+        request.Query("drop table brpc_table");
+        channel.CallMethod(NULL, &cntl, &request, &response, NULL);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(1, response.reply_size());
+        ASSERT_EQ(brpc::MYSQL_RSP_OK, response.reply(0).type());
     }
 }
 

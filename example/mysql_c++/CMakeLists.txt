@@ -127,8 +127,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 endif()
 
 add_executable(mysql_cli mysql_cli.cpp)
-add_executable(mysql_press mysql_press.cpp)
 
 set(AUX_LIB readline ncurses)
 target_link_libraries(mysql_cli ${BRPC_LIB} ${DYNAMIC_LIB} ${AUX_LIB})
-target_link_libraries(mysql_press ${BRPC_LIB} ${DYNAMIC_LIB} ${AUX_LIB})

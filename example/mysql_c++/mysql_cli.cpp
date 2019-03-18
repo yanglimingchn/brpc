@@ -24,7 +24,8 @@
 #include <brpc/mysql.h>
 #include <brpc/policy/mysql_authenticator.h>
 
-DEFINE_string(connection_type, "pooled",
+DEFINE_string(connection_type,
+              "pooled",
               "Connection type. Available values: single, pooled, short");
 DEFINE_string(server, "127.0.0.1", "IP Address of server");
 DEFINE_int32(timeout_ms, 5000, "RPC timeout in milliseconds");
@@ -52,38 +53,15 @@ static bool access_mysql(brpc::Channel& channel, const char* command) {
             LOG(ERROR) << "Fail to access mysql, " << cntl.ErrorText();
             return false;
         }
-        // if (cntl.Failed()) {
-        //     LOG(ERROR) << "Fail to access mysql, " << cntl.ErrorText();
-        //     return false;
-        // } else {
-        // for (int i = 0; i < response.reply_size(); ++i) {
-        //     const brpc::MysqlReply& reply = response.reply(i);
-        //     for (uint64_t j = 0; j < reply.column_number(); ++j) {
-        //         const brpc::MysqlReply::Column* column = reply.column(j);
-        //         std::cout << column->catalog() << std::endl;
-        //         std::cout << column->charset() << std::endl;
-        //     }
-        //     std::cout << "row_number=" << reply.row_number() << std::endl;
-        //     const brpc::MysqlReply::Row* row;
-        //     while ((row = reply.next()) != NULL) {
-        //         for (uint64_t k = 0; k < row->field_number(); ++k) {
-        //             std::cout << "field(" << k << "): " <<
-        //             row->field(k)->string() << "\t";
-        //         }
-        //         std::cout << std::endl;
-        //     }
-        //     // std::cout << reply << std::endl;
-        // }
-        // std::cout << response << std::endl;
-        // return true;
-        // }
     }
     return true;
 }
 
 // For freeing the memory returned by readline().
 struct Freer {
-    void operator()(char* mem) { free(mem); }
+    void operator()(char* mem) {
+        free(mem);
+    }
 };
 
 static void dummy_handler(int) {}
@@ -114,8 +92,7 @@ int main(int argc, char* argv[]) {
     options.connection_type = FLAGS_connection_type;
     options.timeout_ms = FLAGS_timeout_ms /*milliseconds*/;
     options.max_retry = FLAGS_max_retry;
-    options.auth =
-        new brpc::policy::MysqlAuthenticator("yangliming01", "123456", "test");
+    options.auth = new brpc::policy::MysqlAuthenticator("yangliming01", "123456", "test");
     if (channel.Init("127.0.0.1", 3306, &options) != 0) {
         LOG(ERROR) << "Fail to initialize channel";
         return -1;
@@ -139,8 +116,7 @@ int main(int argc, char* argv[]) {
 
         for (;;) {
             char prompt[128];
-            snprintf(prompt, sizeof(prompt), "mysql %s> ",
-                     FLAGS_server.c_str());
+            snprintf(prompt, sizeof(prompt), "mysql %s> ", FLAGS_server.c_str());
             std::unique_ptr<char, Freer> command(readline(prompt));
             if (command == NULL || *command == '\0') {
                 if (g_canceled) {
